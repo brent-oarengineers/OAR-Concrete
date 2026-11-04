@@ -84,7 +84,8 @@ let private shapeOf (shape: obj) (dims: obj) =
 
 /// Bars table, one row per bar or layer: As (mm²) | depth from top face (mm) | fsy (MPa) | [x from left (mm)] | [Es (MPa)].
 /// Rows with a blank or zero area are skipped.
-let private barsOf (o: obj) (xDefault: float) =
+/// Returns (sheet row index, bar) so a parallel range (e.g. bar classes) can be matched up.
+let private barRowsOf (o: obj) (xDefault: float) =
     let a = range o
     if Array2D.length2 a < 3 then failwith "bars: select 3 columns As | depth | fsy (optionally x, Es)"
     [ for i in 0 .. Array2D.length1 a - 1 do
@@ -96,8 +97,10 @@ let private barsOf (o: obj) (xDefault: float) =
               let x = if Array2D.length2 a > 3 then defaultArg (cellOpt a.[i, 3]) xDefault else xDefault
               let es = if Array2D.length2 a > 4 then defaultArg (cellOpt a.[i, 4]) EsDefault else EsDefault
               if fsy <= 0.0 then failwithf "%s: fsy must be positive" row
-              yield Section.barAt area depth fsy x es
+              yield i, Section.barAt area depth fsy x es
           | _ -> () ]
+
+let private barsOf (o: obj) (xDefault: float) = barRowsOf o xDefault |> List.map snd
 
 let private sectionOf shape dims bars =
     let build, xd = shapeOf shape dims
@@ -124,7 +127,7 @@ let private senseOf (o: obj) =
 let concreteVersion () : obj = box ("OAR Concrete " + version)
 
 [<ExcelFunction(Name = "OAR.CONCRETE.ULT",
-                Description = "Ultimate strength by strain compatibility (AS 3600 Cl 8.1). Spills 13 values down: dn mm | kuo | ku | do mm | d mm | εst | σst MPa | σsc MPa | Cc kN | Cs kN | T kN | z mm | Mu kNm",
+                Description = "Ultimate strength by strain compatibility (AS 3600 Cl 8.1). Spills 16 values down: dn mm | kuo | ku | do mm | d mm | εst | σst MPa | σsc MPa | Cc kN | Cs kN | T kN | z mm | Mu kNm | φ | kL | εL (Class L)",
                 Category = Category,
                 IsThreadSafe = true)>]
 let concreteUlt
@@ -136,12 +139,27 @@ let concreteUlt
     ([<ExcelArgument(Name = "sense", Description = "Sagging (top in compression), Hogging, or angle of the compression side in degrees (90 = top)")>] sense: obj)
     ([<ExcelArgument(Name = "[N]", Description = "Axial force kN, compression +. Blank = 0")>] nArg: obj)
     ([<ExcelArgument(Name = "[Ec]", Description = "Ec MPa for the curvilinear law. Blank = Table 3.1.2")>] ecArg: obj)
+    ([<ExcelArgument(Name = "[classes]", Description = "Bar ductility class per bars row, N or L (blank = N). N = 0 only")>] classesArg: obj)
+    ([<ExcelArgument(Name = "[classL]", Description = "Whole section (φ = 0.65 if Class L bars are in tension) or L steel only (Class L areas × 0.65/φ). Blank = whole section")>] modeArg: obj)
     : obj =
     guard (fun () ->
-        let sec = sectionOf shape dims bars
+        let build, xd = shapeOf shape dims
+        let rows = barRowsOf bars xd
+        if rows.IsEmpty then failwith "bars: no reinforcement"
+        let sec = build (rows |> List.map snd)
         let c = concrete (num "fc" fc) (numOpt "Ec" ecArg) (parseModel (text model))
-        let r = Ultimate.analyse sec c (senseOf sense) (defaultArg (numOpt "N" nArg) 0.0)
-        column [ r.Dn; r.Kuo; r.Ku; r.Do; r.D; r.EpsSt; r.SigSt; r.SigSc; r.Cc; r.Cs; r.T; r.Z; abs r.Mu ])
+        let n = defaultArg (numOpt "N" nArg) 0.0
+        let theta = senseOf sense
+        if n <> 0.0 then
+            let r = Ultimate.analyse sec c theta n
+            column [ r.Dn; r.Kuo; r.Ku; r.Do; r.D; r.EpsSt; r.SigSt; r.SigSc; r.Cc; r.Cs; r.T; r.Z; abs r.Mu; nan; nan; nan ]
+        else
+            let cls = range classesArg |> Seq.cast<obj> |> Array.ofSeq
+            let flags = rows |> List.map (fun (i, _) -> i < cls.Length && (text cls.[i]).ToUpperInvariant() = "L")
+            let mode = if (text modeArg).ToUpperInvariant().StartsWith "L" then Flexure.LSteelOnly else Flexure.WholeSection
+            let f = Flexure.capacity sec c theta flags mode
+            let r = f.Ult
+            column [ r.Dn; r.Kuo; r.Ku; r.Do; r.D; r.EpsSt; r.SigSt; r.SigSc; r.Cc; r.Cs; r.T; r.Z; abs r.Mu; f.Phi; f.KL; f.EpsL ])
 
 [<ExcelFunction(Name = "OAR.CONCRETE.CRACKED",
                 Description = "Cracked elastic section (no concrete tension). Spills 5 values down: dn mm | Icr ×10⁶ mm⁴ | σst MPa (largest bar tension) | σsc MPa | σc MPa (extreme fibre)",

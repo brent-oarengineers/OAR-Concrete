@@ -123,6 +123,31 @@ let main argv =
     let r = Ultimate.analyse col (rc 40.0 Rectangular) 90.0 1500.0
     check "Ultimate with N = 1500 kN  internal N" 1500.0 r.N 1e-6
 
+    // ---------------- Class L: whole section vs L steel only (reference_check.l_steel_only) ----------------
+    // S1: 1000 x 175, f'c 32: L9 mesh @ 200 top (290.5 @ 44.3), 3 N16 top (600 @ 48), L9 mesh bottom (290.5 @ 130.7)
+    let s1 = Section.rectangle 1000.0 175.0 [ bar 290.5 44.3 500.0; bar 600.0 48.0 500.0; bar 290.5 130.7 500.0 ]
+    let flags = [ true; false; true ]
+    let c32 = rc 32.0 Rectangular
+    let w = Flexure.capacity s1 c32 -90.0 flags Flexure.WholeSection
+    check "S1 hog whole section  phi = 0.65 (Class L in tension)" 0.65 w.Phi 1e-12
+    check "S1 hog whole section  Muo unreduced" 56.4291 w.Ult.Mu 2e-5
+    let l = Flexure.capacity s1 c32 -90.0 flags Flexure.LSteelOnly
+    check "S1 hog L steel only  phi (Class N formula)" 0.85 l.Phi 1e-9
+    check "S1 hog L steel only  kL = 0.65 / phi" (0.65 / 0.85) l.KL 1e-9
+    check "S1 hog L steel only  Muo reduced section" 52.2262 l.Ult.Mu 2e-5
+    check "S1 hog L steel only  phi Muo" 44.3923 (l.Phi * l.Ult.Mu) 2e-5
+    check "S1 hog L steel only  eps L = 0.003 (130.7 - dn) / dn" (0.003 * (130.7 - l.Ult.Dn) / l.Ult.Dn) l.EpsL 1e-9
+    let l = Flexure.capacity s1 c32 90.0 flags Flexure.LSteelOnly
+    check "S1 sag L steel only  Muo reduced section" 28.5262 l.Ult.Mu 2e-5
+    // phi below 0.85, so k and phi iterate: 300 x 600, 2400 N @ 538 + 1200 L @ 490, f'c 40
+    let it = Section.rectangle 300.0 600.0 [ bar 2400.0 538.0 500.0; bar 1200.0 490.0 500.0 ]
+    let l = Flexure.capacity it (rc 40.0 Rectangular) 90.0 [ false; true ] Flexure.LSteelOnly
+    check "Iterated  phi (reference 0.832671)" 0.8326711 l.Phi 1e-6
+    check "Iterated  kL = 0.65 / phi" 0.7806203 l.KL 1e-6
+    check "Iterated  phi Muo (reference 606.4303)" 606.4303 (l.Phi * l.Ult.Mu) 2e-5
+    let n = Flexure.capacity slab (rc 32.0 Rectangular) 90.0 [ false ] Flexure.LSteelOnly
+    check "No Class L bars  kL = 1, phi from kuo" (Design.phiBending Design.ClassN n.Ult.Kuo) n.Phi 1e-12
+
     printfn ""
     printfn "%d checks, %d failed" count failures
     if failures = 0 then 0 else 1

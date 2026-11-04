@@ -16,6 +16,7 @@
     <Compile Include="Service.fs" />
     <Compile Include="Design.fs" />
     <Compile Include="Interaction.fs" />
+    <Compile Include="Flexure.fs" />
   </ItemGroup>
 
 </Project>

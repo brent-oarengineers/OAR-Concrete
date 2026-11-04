@@ -10,4 +10,6 @@ The calc sheet shows the version it was calculated with (under the green title b
 - Worksheet functions `OAR.CONCRETE.ULT`, `OAR.CONCRETE.CRACKED`, `OAR.CONCRETE.MNCURVE`, `OAR.CONCRETE.VERSION`.
 - Calc template *RC Flexural Design - Base.xlsx*: slab or beam, both directions, ULS, minimum strength, cracked
   bar stresses (Ms*, Ms1*), bar spacing and slab shrinkage steel. Examples S1 (previous slab sheet) and B1.
-- 48 benchmark tests incl. Brent's circular pile script (106.345 kNm).
+- Class L reinforcement: *Whole section 0.65* (default) or *L steel only* (Class L areas × 0.65/φ, φ iterated),
+  with a Class L strain check (≤ 1.5 %) in L steel only mode.
+- 60 benchmark tests incl. Brent's circular pile script (106.345 kNm).

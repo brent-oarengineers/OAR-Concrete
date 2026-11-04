@@ -178,6 +178,7 @@ def build_tab(name, d):
     def nm(n, ref): N[n] = "$" + "".join(ch for ch in ref if ch.isalpha()) + "$" + "".join(ch for ch in ref if ch.isdigit())
     def Fx(s):
         if not isinstance(s, str): return s
+        s = s.replace("«LO»", 'LEFT(«lmode»,1)="L"')
         for k in sorted(N, key=len, reverse=True): s = s.replace(f"«{k}»", N[k])
         assert "«" not in s, s
         return s
@@ -236,6 +237,8 @@ def build_tab(name, d):
     lab("H49", "Layer 2 = second row inside layer 1", sz=7, color=GREY)
     lab("B51", "Ligature bar (beam)"); IN("E51", d.get("lig", "N10"), name="lig"); lab("H51", "beam only; adds to cover", sz=7, color=GREY)
     lab("B52", "Slab supported on (αb, Cl 9.1.1)"); IN("E52:F52", d.get("support", "Beams or walls"), name="support")
+    lab("B53", "Class L reinforcement, φ"); IN("E53:F53", d.get("lmode", "Whole section 0.65"), name="lmode")
+    lab("H53", "L steel only: Class L As × 0.65/φ (judgement)", sz=7, color=GREY)
 
     r = 54; heading(ws, r, "Design Actions")
     table_header(ws, 55, [("E55", "Sagging +"), ("F55", "Hogging −")])
@@ -317,21 +320,25 @@ def build_tab(name, d):
            ("εst", "strain, outermost tension bar", "0.0000", ""), ("σst", "stress, outermost tension bar", "0", "MPa"),
            ("σsc", "max compression bar stress", "0", "MPa"), ("Cc", "concrete compression", "0.0", "kN"),
            ("Cs", "compression steel (net)", "0.0", "kN"), ("T", "tension steel", "0.0", "kN"),
-           ("z", "lever arm Muo / T", "0.0", "mm"), ("Muo", "ultimate moment, N = 0", "0.0", "kNm")]
+           ("z", "lever arm Muo / T", "0.0", "mm"), ("Muo", '=IF(«LO»,"ultimate moment, Class L As × kL","ultimate moment, N = 0")', "0.0", "kNm"),
+           ("φ.L", "φ on reduced section (L steel only)", "0.000", ""), ("kL", "Class L area factor 0.65 / φ", "0.000", ""),
+           ("εsL", "max Class L tensile strain", "0.0000", "")]
     U0 = 87
     for i, (s_, dsc, nf, u) in enumerate(ULT):
         rr = U0 + i; sym(rr, s_); desc(rr, dsc); calc(ws, f"E{rr}", None, nf); calc(ws, f"F{rr}", None, nf); U(f"G{rr}", u)
     U1 = U0 + len(ULT) - 1
-    def ult(sense, model="«model»"): return f'OAR.CONCRETE.ULT("Rect",«b»:«D»,{BARS_ARG},«fc»,{model},"{sense}",,«Ec»)'
+    def ult(sense, model="«model»"): return f'OAR.CONCRETE.ULT("Rect",«b»:«D»,{BARS_ARG},«fc»,{model},"{sense}",,«Ec»,$I$69:$I$72,«lmode»)'
     pend.append((f"E{U0}", "=" + ult("Sagging"))); arrays.append(f"E{U0}:E{U1}")
     pend.append((f"F{U0}", "=" + ult("Hogging"))); arrays.append(f"F{U0}:F{U1}")
-    nm("kuo_s", f"E{U0+1}"); nm("kuo_h", f"F{U0+1}"); nm("Muo_s", f"E{U1}"); nm("Muo_h", f"F{U1}")
-    r = U1 + 1  # 100
+    nm("kuo_s", f"E{U0+1}"); nm("kuo_h", f"F{U0+1}"); nm("Muo_s", f"E{U0+12}"); nm("Muo_h", f"F{U0+12}")
+    nm("phiE_s", f"E{U0+13}"); nm("phiE_h", f"F{U0+13}"); nm("kL_s", f"E{U0+14}"); nm("kL_h", f"F{U0+14}")
+    nm("epsL_s", f"E{U0+15}"); nm("epsL_h", f"F{U0+15}")
+    r = U1 + 1
     sym(r, "class"); desc(r, "tension face (any L bar → L)")
     CA(f"E{r}", '=IF(OR(«clbm»="L",«clbx»="L"),"L","N")', name="cls_s"); CA(f"F{r}", '=IF(OR(«cltm»="L",«cltx»="L"),"L","N")', name="cls_h")
-    r += 1; sym(r, "φ"); desc(r, "Tbl 2.2.2 (Class L: 0.65)")
+    r += 1; sym(r, "φ"); desc(r, '=IF(«LO»,"Class N formula, Class L As × kL","Tbl 2.2.2 (Class L: 0.65)")')
     for col, s in (("E", "s"), ("F", "h")):
-        CA(f"{col}{r}", f'=IF(«cls_{s}»="L",0.65,MIN(0.85,MAX(0.65,1.24-13*«kuo_{s}»/12)))', "0.000", name=f"phi_{s}")
+        CA(f"{col}{r}", f'=IF(«LO»,«phiE_{s}»,IF(«cls_{s}»="L",0.65,MIN(0.85,MAX(0.65,1.24-13*«kuo_{s}»/12))))', "0.000", name=f"phi_{s}")
     r += 1; sym(r, "φMuo"); desc(r, "design capacity")
     CA(f"E{r}", "=«phi_s»*«Muo_s»", "0.0", name="phiM_s"); CA(f"F{r}", "=«phi_h»*«Muo_h»", "0.0", name="phiM_h"); U(f"G{r}", "kNm")
     r += 1; sym(r, "Muo'"); desc(r, '=IF(«model»="Rectangular","Curvilinear block, for comparison","Rectangular block, for comparison")')
@@ -341,6 +348,7 @@ def build_tab(name, d):
     r += 1; sym(r, "φMuo'"); desc(r, "same φ, for comparison (info)")
     CA(f"E{r}", "=«phi_s»*«Muo2_s»", "0.0", name="phiM2_s"); CA(f"F{r}", "=«phi_h»*«Muo2_h»", "0.0", name="phiM2_h"); U(f"G{r}", "kNm")
     ULT_END = r
+    pend.append((f"B{ULT_END + 1}", '=IF(«LO»,"L steel only: Class L areas × kL = 0.65/φ, φ from the Class N formula on that section, iterated until φ and kL agree. Engineering judgement, not a Table 2.2.2 provision.","Whole section: φ = 0.65 if any tension-face bar is Class L (Table 2.2.2).")')); ws[f"B{ULT_END + 1}"].font = font(7, i=True, color=GREY)
 
     # Minimum strength
     r = ULT_END + 2; heading(ws, r, "Minimum Strength (Cl 8.1.6.1 / 9.1.1)")
@@ -428,7 +436,7 @@ def build_tab(name, d):
     ws.merge_cells("B10:D10"); ws.merge_cells("F10:G10"); ws.merge_cells("I10:K10")
     pend.append(("B10", '=IF(«type»="Slab",«D»&" slab",«b»&" × "&«D»&" beam")&"  ·  f\'c "&«fc»'))
     ws["B10"].font = font(12, True, color=GREEN); ws["B10"].alignment = LEFT
-    CHK0, CHK1 = 15, 31
+    CHK0, CHK1 = 15, 32
     c = ws["F10"]; c.value = f'=IF(COUNT(I{CHK0}:I{CHK1})=0,"–",MAX(I{CHK0}:I{CHK1}))'; c.font = font(12, True, color=GREEN); c.number_format = "0%"; c.alignment = LEFT
     c = ws["I10"]; c.value = (f'=IF(COUNTIF(E{U0}:F{U1},"#OAR*")+COUNTIF(E{C1}:H{C2},"#OAR*")>0,"INPUT ERROR",'
                               f'IF(COUNT(I{CHK0}:I{CHK1})=0,"PENDING",IF(OR(MAX(I{CHK0}:I{CHK1})>1,COUNTIF(J{CHK0}:J{CHK1},"NG")>0),"FAIL","PASS")))')
@@ -436,7 +444,7 @@ def build_tab(name, d):
     for x in ws["I10:K10"][0]: x.border = BOX
     passfail_cf(ws, "I10:K10", "$I$10")
     def face(f): return (f'IF(«type»="Slab",«{f}mb»&"@"&«{f}mn»,«{f}mn»&«{f}mb»)&IF(N(«{f}xn»)>0," + "&«{f}xn»&«{f}xb»,"")')
-    pend.append(("B11", f'="Top "&{face("t")}&"  ·  bottom "&{face("b")}&"  ·  "&«model»'))
+    pend.append(("B11", f'="Top "&{face("t")}&"  ·  bottom "&{face("b")}&"  ·  "&«model»&IF(«LO»,"  ·  Class L: L steel only","")'))
     ws["B11"].font = font(7, color=GREY)
     c = ws["F11"]
     c.value = (f'=IFERROR(IF(LEFT(E{U0},4)="#OAR",E{U0},IF(LEFT(F{U0},4)="#OAR",F{U0},IF(LEFT(E{C1},4)="#OAR",E{C1},IF(LEFT(F{C1},4)="#OAR",F{C1},'
@@ -459,24 +467,27 @@ def build_tab(name, d):
         chk(rr, f"Muo{'+' if s == 's' else '−'} ≥ (Muo)min", f"1.2Mcr, or Ast ≥ Ast.min ({face})", "=«Mmin»", f"=«Muo_{s}»", "kNm",
             f'=IF(«Ast_{s}»=0,"",MIN(«Mmin»/«Muo_{s}»,IF(«Ast_{s}»>0,«Amin_{s}»/«Ast_{s}»,9)))',
             status=f'=IF(I{rr}="","–",IF(«Mmin»/«Muo_{s}»<=1,"OK",IF(I{rr}<=1,"OK*","NG")))', ratio=f'=IF(«Ast_{s}»=0,"",«Ast_{s}»/«Amin_{s}»)')
-    heading(ws, 19, "Serviceability – crack control", sz=8)
-    chk(20, "σscr+ (Ms*)", "sagging, bottom bars ≤ σs.max", "=IF(N(«sMs»)=0,\"\",«sig_s»)", "=«smax_s»", "MPa", ut(20, "N(«sMs»)=0"), nf="0")
-    chk(21, "σscr− (Ms*)", "hogging, top bars ≤ σs.max", "=IF(N(«hMs»)=0,\"\",«sig_h»)", "=«smax_h»", "MPa", ut(21, "N(«hMs»)=0"), nf="0")
-    chk(22, "σscr.1+ (Ms1*)", "sagging ≤ 0.8 fsy", "=IF(N(«sMs1»)=0,\"\",«sig1_s»)", "=«s08_s»", "MPa", ut(22, "N(«sMs1»)=0"), nf="0")
-    chk(23, "σscr.1− (Ms1*)", "hogging ≤ 0.8 fsy", "=IF(N(«hMs1»)=0,\"\",«sig1_h»)", "=«s08_h»", "MPa", ut(23, "N(«hMs1»)=0"), nf="0")
-    chk(24, "s bottom", '=IF(«type»="Slab","bar spacing ≤ min(2D, 300)","bar spacing ≤ 300 (layer 1)")', '=IF(«sp_s»=0,"",«sp_s»)', "=«spmax»", "mm",
-        ut(24, "«sp_s»=0"), nf="0")
-    chk(25, "s top", '=IF(«type»="Slab","bar spacing ≤ min(2D, 300)","bar spacing ≤ 300 (layer 1)")', '=IF(«sp_h»=0,"",«sp_h»)', "=«spmax»", "mm",
-        ut(25, "«sp_h»=0"), nf="0")
-    chk(26, "As shrinkage", '=IF(«type»="Slab","main mats ≥ ρ b D (shrinkage & temp.)","slabs only")',
-        '=IF(«type»="Slab",«Ashr»,"")', '=IF(«type»="Slab",«Asmats»,"")', "mm²", '=IF(«type»<>"Slab","",E26/F26)', nf="0")
-    heading(ws, 27, "Information (not in max utilisation)", sz=8)
-    for rr, s in ((28, "s"), (29, "h")):
-        chk(rr, f"kuo{'+' if s == 's' else '−'}", f'="φ = "&TEXT(«phi_{s}»,"0.00")&"  (Class "&«cls_{s}»&")"', f"=«kuo_{s}»", None, "", None, status="info", nf="0.000")
-    for rr, s in ((30, "s"), (31, "h")):
+    chk(19, "εsL ≤ 1.5 %", '=IF(«LO»,"Class L strain at ULS (L steel only)","Class L strain at ULS (info)")',
+        '=IF(COUNTIF($I$69:$I$72,"L")=0,"",MAX(«epsL_s»,«epsL_h»))', "=0.015", "", '=IF(OR(E19="",NOT(«LO»)),"",E19/F19)',
+        status='=IF(E19="","–",IF(NOT(«LO»),"info",IF(I19<=1,"OK","NG")))', nf="0.0000")
+    heading(ws, 20, "Serviceability – crack control", sz=8)
+    chk(21, "σscr+ (Ms*)", "sagging, bottom bars ≤ σs.max", "=IF(N(«sMs»)=0,\"\",«sig_s»)", "=«smax_s»", "MPa", ut(21, "N(«sMs»)=0"), nf="0")
+    chk(22, "σscr− (Ms*)", "hogging, top bars ≤ σs.max", "=IF(N(«hMs»)=0,\"\",«sig_h»)", "=«smax_h»", "MPa", ut(22, "N(«hMs»)=0"), nf="0")
+    chk(23, "σscr.1+ (Ms1*)", "sagging ≤ 0.8 fsy", "=IF(N(«sMs1»)=0,\"\",«sig1_s»)", "=«s08_s»", "MPa", ut(23, "N(«sMs1»)=0"), nf="0")
+    chk(24, "σscr.1− (Ms1*)", "hogging ≤ 0.8 fsy", "=IF(N(«hMs1»)=0,\"\",«sig1_h»)", "=«s08_h»", "MPa", ut(24, "N(«hMs1»)=0"), nf="0")
+    chk(25, "s bottom", '=IF(«type»="Slab","bar spacing ≤ min(2D, 300)","bar spacing ≤ 300 (layer 1)")', '=IF(«sp_s»=0,"",«sp_s»)', "=«spmax»", "mm",
+        ut(25, "«sp_s»=0"), nf="0")
+    chk(26, "s top", '=IF(«type»="Slab","bar spacing ≤ min(2D, 300)","bar spacing ≤ 300 (layer 1)")', '=IF(«sp_h»=0,"",«sp_h»)', "=«spmax»", "mm",
+        ut(26, "«sp_h»=0"), nf="0")
+    chk(27, "As shrinkage", '=IF(«type»="Slab","main mats ≥ ρ b D (shrinkage & temp.)","slabs only")',
+        '=IF(«type»="Slab",«Ashr»,"")', '=IF(«type»="Slab",«Asmats»,"")', "mm²", '=IF(«type»<>"Slab","",E27/F27)', nf="0")
+    heading(ws, 28, "Information (not in max utilisation)", sz=8)
+    for rr, s in ((29, "s"), (30, "h")):
+        chk(rr, f"kuo{'+' if s == 's' else '−'}", f'="φ = "&TEXT(«phi_{s}»,"0.00")&IF(«LO»,"  (kL = "&TEXT(«kL_{s}»,"0.00")&")","  (Class "&«cls_{s}»&")")', f"=«kuo_{s}»", None, "", None, status="info", nf="0.000")
+    for rr, s in ((31, "s"), (32, "h")):
         chk(rr, f"φMuo'{'+' if s == 's' else '−'}", '=IF(«model»="Rectangular","curvilinear block","rectangular block")&" (comparison)"',
             f"=«phiM2_{s}»", f"=«phiM_{s}»", "kNm", None, status="info", ratio=f"=IF(N(«phiM_{s}»)=0,\"\",«phiM2_{s}»/«phiM_{s}»)")
-    for rr in range(28, 32): ws[f"J{rr}"].font = font(8, i=True, color=GREY)
+    for rr in range(29, 33): ws[f"J{rr}"].font = font(8, i=True, color=GREY)
     status_cf(ws, f"J{CHK0}:K{CHK1}"); util_cf(ws, f"I{CHK0}:I{CHK1}", f"I{CHK0}")
 
     # ------------------------------------------------------------------ resolve, arrays, validation, grey-outs
@@ -486,7 +497,7 @@ def build_tab(name, d):
     def dvl(formula, ref):
         v = DataValidation(type="list", formula1=formula, allow_blank=True); ws.add_data_validation(v); v.add(ref)
     dvl('"Slab,Beam"', "E34"); dvl('"Rectangular,Curvilinear,Parabolic"', "E38"); dvl("=BarList", "E45:F45"); dvl("=BarList", "E48:F48")
-    dvl('"Layer 1,Layer 2"', "E49:F49"); dvl("=BarList", "E51"); dvl('"Beams or walls,Columns"', "E52"); dvl('"Minor,Moderate,Strong"', "E63")
+    dvl('"Layer 1,Layer 2"', "E49:F49"); dvl("=BarList", "E51"); dvl('"Beams or walls,Columns"', "E52"); dvl('"Minor,Moderate,Strong"', "E63"); dvl('"Whole section 0.65,L steel only"', "E53")
     rules = [("E51", '«type»<>"Beam"', "B51"),
              ("E52:F52", '«type»<>"Slab"', "B52"),
              ("E63:F64", '«type»<>"Slab"', "B63:B64"),
@@ -500,7 +511,7 @@ def build_tab(name, d):
         if ws.row_dimensions[rr].height is None: ws.row_dimensions[rr].height = 14
     ws.print_area = f"A1:K{LAST}"
     ws.row_breaks.append(Break(id=64))
-    ws.row_breaks.append(Break(id=ULT_END))
+    ws.row_breaks.append(Break(id=ULT_END + 1))
     return ws, N
 
 

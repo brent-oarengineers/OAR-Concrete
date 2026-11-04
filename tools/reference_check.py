@@ -95,6 +95,18 @@ def cracked_rect(b, D, layers, ec, M, sag=True):
     return dict(dn=x, Icr=icr, sig_st=sig_st, sig_c=M * 1e6 * x / icr)
 
 
+def l_steel_only(b, D, layers, classes, fc, sag=True):
+    """Class L areas x 0.65/phi, phi from the Class N formula on the reduced section, iterated."""
+    phi = 0.85
+    for _ in range(50):
+        lay = [(a * (0.65 / phi if c == "L" else 1.0), d, fy) for (a, d, fy), c in zip(layers, classes)]
+        r = ult_rect(b, D, lay, fc, sag=sag)
+        new = min(0.85, max(0.65, 1.24 - 13 * r["kuo"] / 12))
+        if abs(new - phi) < 1e-10: break
+        phi = new
+    return dict(phi=phi, k=0.65 / phi, Mu=r["Mu"], kuo=r["kuo"], phiMu=phi * r["Mu"])
+
+
 def pile_brent():
     """Brent's Circular_Pile_AS3600.py example: D450, 4/N20 (310), cover 100 + lig 10, f'c 40, Ec 30100"""
     import importlib.util, os, sys, io, contextlib
@@ -126,5 +138,9 @@ if __name__ == "__main__":
     for sag in (True, False):
         r = cracked_rect(300, 600, lay, 32800, 250, sag=sag)
         print(f"  beam M 250 {'sag' if sag else 'hog'}: dn {r['dn']:.4f}  Icr {r['Icr']:.1f}  sig_st {r['sig_st']:.4f}  sig_c {r['sig_c']:.4f}")
+    S1 = [(290.5, 44.3, 500), (600, 48, 500), (290.5, 130.7, 500)]
+    for sag in (True, False):
+        r = l_steel_only(1000, 175, S1, ["L", "N", "L"], 32, sag=sag)
+        print(f"S1 L steel only {'sag' if sag else 'hog'}: phi {r['phi']:.5f}  k {r['k']:.5f}  Muo {r['Mu']:.4f}  phiMuo {r['phiMu']:.4f}")
     p = pile_brent()
     if p: print(f"Brent's pile (curvilinear): Mu {p['Mu']:.4f}  kuo {p['kuo']:.5f}  dn {p['dn']:.4f}")

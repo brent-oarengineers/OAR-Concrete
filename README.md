@@ -47,6 +47,9 @@ biaxial bending): see *Groundwork for the column sheet* below.
    stresses and the extreme-fibre concrete stress. Pass Ec / (1 + φcc) for a long-term modular ratio.
 6. **Design.fs** – φ (Table 2.2.2) for bending, bending + compression and bending + tension, squash load, balanced dn.
 7. **Interaction.fs** – M–N curve for one direction (pure tension → pure bending → … → squash), with φ.
+8. **Flexure.fs** – Muo with φ and the two Class L treatments: *whole section* (φ = 0.65 if any Class L bar is in
+   tension) or *L steel only* (Class L areas × kL = 0.65/φ, φ from the Class N formula on that reduced section,
+   iterated until φ and kL agree), plus the largest Class L tensile strain.
 
 ## How the calc sheet uses the add-in
 
@@ -55,7 +58,7 @@ Code checks are visible worksheet formulas: bar areas and depths (the *Reinforce
 the add-in:
 
 ```
-=OAR.CONCRETE.ULT(shape, dims, bars, fc, model, sense, [N], [Ec])      spills 13 values down
+=OAR.CONCRETE.ULT(shape, dims, bars, fc, model, sense, [N], [Ec], [classes], [classL])   spills 16 values down
 =OAR.CONCRETE.CRACKED(shape, dims, bars, Ec, M, sense, [N])            spills 5 values down
 ```
 
@@ -66,8 +69,11 @@ the add-in:
 | `model` | `Rectangular`, `Curvilinear` or `Parabolic` |
 | `sense` | `Sagging` (top in compression), `Hogging`, or an angle in degrees for the column sheet |
 | `N` | axial force, kN, compression + (blank = 0) |
+| `classes` | one cell per bars row, `N` or `L` (the Class column of the layers table) |
+| `classL` | `Whole section 0.65` (default) or `L steel only` |
 
-`ULT` spills: dn, kuo, ku, do, d, εst, σst, σsc, Cc, Cs, T, z, Muo (mm, MPa, kN, kNm).
+`ULT` spills: dn, kuo, ku, do, d, εst, σst, σsc, Cc, Cs, T, z, Muo, φ, kL, εsL (mm, MPa, kN, kNm). With L steel only,
+dn … Muo are for the reduced section. φ, kL and εsL are blank when N ≠ 0.
 `CRACKED` spills: dn, Icr (×10⁶ mm⁴), σst (largest bar tension), σsc, σc.
 Also `OAR.CONCRETE.MNCURVE(...)` (rows N, M, dn, φ, φN, φM – preview for the column sheet) and
 `OAR.CONCRETE.VERSION()`. Errors show as `#OAR! …` text, and the summary status then reads INPUT ERROR.
@@ -80,7 +86,10 @@ Also `OAR.CONCRETE.MNCURVE(...)` (rows N, M, dn, φ, φN, φM – preview for th
   Mesh wires L6–L12 are on the Bars tab (Class L; SL92 = L9 @ 200).
 - ULS both directions with the selected stress block; the other block (rectangular ↔ curvilinear) is shown as an
   info row for comparison.
-- φ from kuo, Class N formula; 0.65 if any bar on the tension face is Class L.
+- φ from kuo, Class N formula. Class L (dropdown *Class L reinforcement, φ*): **Whole section 0.65** (default, Table
+  2.2.2 as written: any Class L bar on the tension face) or **L steel only** (Class L areas × 0.65/φ, judgement –
+  printed as such on the calc). In L steel only mode the largest Class L tensile strain at ULS is checked against
+  1.5 % (Class L uniform elongation); in whole-section mode it is shown as info.
 - Minimum strength: Muo ≥ 1.2 Z f'ct.f, or deemed-to-comply Ast ≥ αb (D/d)² f'ct.f/fsy · bd (OK* when only the
   deemed route passes). αb 0.20 beams; slabs 0.19 on beams/walls, 0.24 on columns.
 - SLS: σscr under Ms* ≤ σs.max and σscr.1 under Ms1* ≤ 0.8 fsy, both faces; bar spacing ≤ 300 (beam) or
@@ -93,6 +102,7 @@ With the add-in loaded the example tabs should read:
 | Tab | Member | Max utilisation | Governs |
 |---|---|---|---|
 | S1 | 175 slab, f'c 32, SL92 T&B + 3 N16 top (previous slab sheet example) | 102 % FAIL | hogging: φMuo 36.7 vs M* 37.3 kNm (φ = 0.65, Class L mesh in the tension face) |
+| S1, *L steel only* | same | 94 % PASS | Class L strain 1.42 % vs 1.5 %; hogging φMuo 44.4 (φ 0.85, kL 0.765) |
 | B1 | 1200 × 600 band beam, f'c 40, 7 + 4 N24 top (2 layers), 6 N24 bottom | 128 % FAIL | hogging σscr 332 MPa vs 260 MPa (legacy table B, s = 175) |
 
 Key values (engine = `tools/reference_check.py` to 4 figures): S1 Muo 32.73 / 56.43 kNm, dn 25.25 mm both ways,
@@ -100,7 +110,7 @@ Key values (engine = `tools/reference_check.py` to 4 figures): S1 Muo 32.73 / 56
 
 ## What is checked, and against what
 
-`dotnet run --project tests/OAR.Concrete.Tests -c Release` (48 checks):
+`dotnet run --project tests/OAR.Concrete.Tests -c Release` (60 checks):
 
 | Area | Benchmark | Tolerance |
 |---|---|---|
@@ -110,6 +120,7 @@ Key values (engine = `tools/reference_check.py` to 4 figures): S1 Muo 32.73 / 56
 | Cracked section with (n − 1)Asc, both directions | `reference_check.py` | 1e-5 |
 | Circular pile, curvilinear | Brent's `Circular_Pile_AS3600.py`: Mu 106.345 kNm, dn 85.81, kuo 0.2524 | 5e-5 |
 | Circle vs 720-gon of equal area; 8-bar pile rotated 45° | same Mu | 2e-4 / 1e-6 |
+| Class L, whole section / L steel only | S1 φ 0.65 vs φ 0.85, kL 0.765, φMuo 44.39; iterated case φ 0.8327, φMuo 606.43 (`reference_check.l_steel_only`) | 2e-5 |
 | M–N curve | squash α1 f'c Ac + fsy As, pure tension, pure-bending point = Muo, solve for N = 1500 kN | 1e-9 |
 
 ## Open items to confirm before relying on them
@@ -117,8 +128,6 @@ Key values (engine = `tools/reference_check.py` to 4 figures): S1 Muo 32.73 / 56
 - **Crack-control stress limits.** The sheet uses the *legacy* limits from the previous OAR slab sheet (fits to the
   AS 3600-2009 tables). AS 3600-2018 Amdt 2 replaced these with crack-width tables (Tbl 8.6.2.2 / 9.5.2.1) that are
   not built in – enter σs.max on the sheet from your copy, or ask for those tables to be added.
-- **Class L rule.** φ = 0.65 if *any* tension-face bar is Class L (conservative where N bars carry most of the
-  steel, e.g. S1).
 - **Shrinkage steel** uses the previous sheet's interpolation on b D (the old sheet used b d).
 - **φ for compression members** (MNCURVE default φ0 = 0.65): confirm against Table 2.2.2 before the column sheet.
 - Not covered: shear, torsion, deflection, detailing.
