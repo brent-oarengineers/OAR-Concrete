@@ -1,0 +1,192 @@
+/// Excel worksheet functions. This file only converts between Excel values and the engine;
+/// all analysis is in OAR.Concrete.Core so it can be tested without Excel.
+module OAR.Concrete.Excel.Functions
+
+open System
+open ExcelDna.Integration
+open OAR.Concrete
+open OAR.Concrete.Materials
+
+[<Literal>]
+let Category = "OAR Concrete"
+
+let private version = "0.1.0"
+
+// ---------- conversion helpers (same as OAR Timber) ----------
+
+let private isMissing (o: obj) =
+    match o with
+    | null -> true
+    | :? ExcelMissing
+    | :? ExcelEmpty -> true
+    | :? string as s -> s.Trim() = ""
+    | _ -> false
+
+let private tryNum (o: obj) =
+    match o with
+    | :? float as v -> Some v
+    | :? string as s ->
+        match Double.TryParse(s.Trim(), Globalization.NumberStyles.Float, Globalization.CultureInfo.InvariantCulture) with
+        | true, v -> Some v
+        | _ -> None
+    | :? bool as b -> Some(if b then 1.0 else 0.0)
+    | _ -> None
+
+let private num (name: string) (o: obj) =
+    match o with
+    | :? ExcelError -> failwithf "%s contains an Excel error" name
+    | _ when isMissing o -> failwithf "%s is blank" name
+    | _ ->
+        match tryNum o with
+        | Some v -> v
+        | None -> failwithf "%s: '%O' is not a number" name o
+
+let private numOpt (name: string) (o: obj) = if isMissing o then None else Some(num name o)
+
+let private cellOpt (o: obj) =
+    match o with
+    | :? ExcelError -> None
+    | _ when isMissing o -> None
+    | _ -> tryNum o
+
+let private text (o: obj) = if isMissing o then "" else (string o).Trim()
+
+let private range (o: obj) : obj[,] =
+    match o with
+    | :? (obj[,]) as a -> a
+    | v -> Array2D.create 1 1 v
+
+/// Run a function and turn any failure into readable text in the cell
+let private guard (f: unit -> obj) : obj =
+    try
+        f ()
+    with ex ->
+        box ("#OAR! " + ex.Message)
+
+let private column (values: float list) =
+    let out = Array2D.create values.Length 1 (box "")
+    values |> List.iteri (fun i v -> out.[i, 0] <- (if Double.IsNaN v || Double.IsInfinity v then box "–" else box v))
+    box out
+
+// ---------- section from the sheet ----------
+
+/// shape "Rect" with dims {b, D}, or "Circle" with dims {D}. Returns the builder and the default bar x.
+let private shapeOf (shape: obj) (dims: obj) =
+    let d = range dims |> Seq.cast<obj> |> Seq.choose cellOpt |> Array.ofSeq
+    let s = (text shape).ToUpperInvariant()
+    if s = "" || s.StartsWith "RECT" || s = "SLAB" || s = "BEAM" then
+        if d.Length < 2 then failwith "dims: a rectangle needs 2 cells, b and D (mm)"
+        (fun bars -> Section.rectangle d.[0] d.[1] bars), d.[0] / 2.0
+    elif s.StartsWith "CIRC" then
+        if d.Length < 1 then failwith "dims: a circle needs its diameter D (mm)"
+        (fun bars -> Section.circular d.[0] bars), d.[0] / 2.0
+    else failwithf "shape '%s' not recognised (Rect, Circle)" (text shape)
+
+/// Bars table, one row per bar or layer: As (mm²) | depth from top face (mm) | fsy (MPa) | [x from left (mm)] | [Es (MPa)].
+/// Rows with a blank or zero area are skipped.
+let private barsOf (o: obj) (xDefault: float) =
+    let a = range o
+    if Array2D.length2 a < 3 then failwith "bars: select 3 columns As | depth | fsy (optionally x, Es)"
+    [ for i in 0 .. Array2D.length1 a - 1 do
+          match cellOpt a.[i, 0] with
+          | Some area when area > 0.0 ->
+              let row = sprintf "bars row %d" (i + 1)
+              let depth = num (row + " depth") a.[i, 1]
+              let fsy = num (row + " fsy") a.[i, 2]
+              let x = if Array2D.length2 a > 3 then defaultArg (cellOpt a.[i, 3]) xDefault else xDefault
+              let es = if Array2D.length2 a > 4 then defaultArg (cellOpt a.[i, 4]) EsDefault else EsDefault
+              if fsy <= 0.0 then failwithf "%s: fsy must be positive" row
+              yield Section.barAt area depth fsy x es
+          | _ -> () ]
+
+let private sectionOf shape dims bars =
+    let build, xd = shapeOf shape dims
+    let b = barsOf bars xd
+    if b.IsEmpty then failwith "bars: no reinforcement"
+    build b
+
+/// "Sagging" (top in compression) = 90°, "Hogging" = −90°, or an angle in degrees
+let private senseOf (o: obj) =
+    match o with
+    | :? float as v -> v
+    | _ ->
+        let t = (text o).ToUpperInvariant()
+        match tryNum o with
+        | Some v when not (o :? bool) -> v
+        | _ ->
+            if t.StartsWith "SAG" || t = "+" then 90.0
+            elif t.StartsWith "HOG" || t = "-" then -90.0
+            else failwithf "sense '%s' not recognised (Sagging, Hogging, or angle in degrees)" (text o)
+
+// ---------- functions ----------
+
+[<ExcelFunction(Name = "OAR.CONCRETE.VERSION", Description = "OAR Concrete add-in version", Category = Category)>]
+let concreteVersion () : obj = box ("OAR Concrete " + version)
+
+[<ExcelFunction(Name = "OAR.CONCRETE.ULT",
+                Description = "Ultimate strength by strain compatibility (AS 3600 Cl 8.1). Spills 13 values down: dn mm | kuo | ku | do mm | d mm | εst | σst MPa | σsc MPa | Cc kN | Cs kN | T kN | z mm | Mu kNm",
+                Category = Category,
+                IsThreadSafe = true)>]
+let concreteUlt
+    ([<ExcelArgument(Name = "shape", Description = "Rect or Circle")>] shape: obj)
+    ([<ExcelArgument(Name = "dims", Description = "Rect: 2 cells b, D (mm). Circle: D (mm)")>] dims: obj)
+    ([<ExcelArgument(Name = "bars", Description = "Rows: As mm² | depth from top mm | fsy MPa | [x from left mm] | [Es MPa]")>] bars: obj)
+    ([<ExcelArgument(Name = "fc", Description = "f'c, MPa")>] fc: obj)
+    ([<ExcelArgument(Name = "model", Description = "Rectangular (Cl 8.1.3), Curvilinear (Cl 3.1.4) or Parabolic")>] model: obj)
+    ([<ExcelArgument(Name = "sense", Description = "Sagging (top in compression), Hogging, or angle of the compression side in degrees (90 = top)")>] sense: obj)
+    ([<ExcelArgument(Name = "[N]", Description = "Axial force kN, compression +. Blank = 0")>] nArg: obj)
+    ([<ExcelArgument(Name = "[Ec]", Description = "Ec MPa for the curvilinear law. Blank = Table 3.1.2")>] ecArg: obj)
+    : obj =
+    guard (fun () ->
+        let sec = sectionOf shape dims bars
+        let c = concrete (num "fc" fc) (numOpt "Ec" ecArg) (parseModel (text model))
+        let r = Ultimate.analyse sec c (senseOf sense) (defaultArg (numOpt "N" nArg) 0.0)
+        column [ r.Dn; r.Kuo; r.Ku; r.Do; r.D; r.EpsSt; r.SigSt; r.SigSc; r.Cc; r.Cs; r.T; r.Z; abs r.Mu ])
+
+[<ExcelFunction(Name = "OAR.CONCRETE.CRACKED",
+                Description = "Cracked elastic section (no concrete tension). Spills 5 values down: dn mm | Icr ×10⁶ mm⁴ | σst MPa (largest bar tension) | σsc MPa | σc MPa (extreme fibre)",
+                Category = Category,
+                IsThreadSafe = true)>]
+let concreteCracked
+    ([<ExcelArgument(Name = "shape", Description = "Rect or Circle")>] shape: obj)
+    ([<ExcelArgument(Name = "dims", Description = "Rect: 2 cells b, D (mm). Circle: D (mm)")>] dims: obj)
+    ([<ExcelArgument(Name = "bars", Description = "Rows: As mm² | depth from top mm | fsy MPa | [x from left mm] | [Es MPa]")>] bars: obj)
+    ([<ExcelArgument(Name = "Ec", Description = "Concrete modulus for the modular ratio, MPa (Ec / (1 + φcc) for long term)")>] ecArg: obj)
+    ([<ExcelArgument(Name = "M", Description = "Service moment, kNm (magnitude)")>] mArg: obj)
+    ([<ExcelArgument(Name = "sense", Description = "Sagging (top in compression), Hogging, or angle in degrees")>] sense: obj)
+    ([<ExcelArgument(Name = "[N]", Description = "Axial compression kN. Blank = 0")>] nArg: obj)
+    : obj =
+    guard (fun () ->
+        let sec = sectionOf shape dims bars
+        let m = defaultArg (numOpt "M" mArg) 0.0
+        let r = Service.analyse sec (num "Ec" ecArg) (senseOf sense) m (defaultArg (numOpt "N" nArg) 0.0)
+        column [ r.Dn; r.Icr / 1e6; r.SigSt; r.SigSc; r.SigC ])
+
+[<ExcelFunction(Name = "OAR.CONCRETE.MNCURVE",
+                Description = "M–N interaction curve for one bending direction (preview for the column sheet). Spills rows: N kN | M kNm | dn mm | φ | φN kN | φM kNm, from pure tension to squash",
+                Category = Category,
+                IsThreadSafe = true)>]
+let concreteMnCurve
+    ([<ExcelArgument(Name = "shape", Description = "Rect or Circle")>] shape: obj)
+    ([<ExcelArgument(Name = "dims", Description = "Rect: 2 cells b, D (mm). Circle: D (mm)")>] dims: obj)
+    ([<ExcelArgument(Name = "bars", Description = "Rows: As mm² | depth from top mm | fsy MPa | [x from left mm] | [Es MPa]")>] bars: obj)
+    ([<ExcelArgument(Name = "fc", Description = "f'c, MPa")>] fc: obj)
+    ([<ExcelArgument(Name = "model", Description = "Rectangular, Curvilinear or Parabolic")>] model: obj)
+    ([<ExcelArgument(Name = "sense", Description = "Sagging / Hogging or angle in degrees")>] sense: obj)
+    ([<ExcelArgument(Name = "[points]", Description = "Number of strain-compatibility points, default 20")>] pointsArg: obj)
+    ([<ExcelArgument(Name = "[phi0]", Description = "φ for compression members (Table 2.2.2), default 0.65")>] phi0Arg: obj)
+    ([<ExcelArgument(Name = "[class]", Description = "Reinforcement ductility N or L, default N")>] classArg: obj)
+    ([<ExcelArgument(Name = "[Ec]", Description = "Ec MPa for the curvilinear law. Blank = Table 3.1.2")>] ecArg: obj)
+    : obj =
+    guard (fun () ->
+        let sec = sectionOf shape dims bars
+        let c = concrete (num "fc" fc) (numOpt "Ec" ecArg) (parseModel (text model))
+        let n = int (defaultArg (numOpt "points" pointsArg) 20.0)
+        let duct = if (text classArg).ToUpperInvariant() = "L" then Design.ClassL else Design.ClassN
+        let pts = Interaction.curve sec c (senseOf sense) (max 2 n) (defaultArg (numOpt "phi0" phi0Arg) 0.65) duct
+        let out = Array2D.create pts.Length 6 (box "")
+        pts
+        |> List.iteri (fun i p ->
+            [ p.N; p.M; p.Dn; p.Phi; p.PhiN; p.PhiM ]
+            |> List.iteri (fun j v -> out.[i, j] <- (if Double.IsNaN v then box "–" else box v)))
+        box out)

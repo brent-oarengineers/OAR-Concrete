@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Concrete section engine. No Excel code here, so the column sheet (and other add-ins) can reuse it. -->
+  <PropertyGroup>
+    <TargetFramework>netstandard2.0</TargetFramework>
+    <RootNamespace>OAR.Concrete</RootNamespace>
+    <Version>0.1.0</Version>
+  </PropertyGroup>
+
+  <!-- F# compiles files in this order: each file can only use what is above it. -->
+  <ItemGroup>
+    <Compile Include="Materials.fs" />
+    <Compile Include="Geometry.fs" />
+    <Compile Include="Section.fs" />
+    <Compile Include="Ultimate.fs" />
+    <Compile Include="Service.fs" />
+    <Compile Include="Design.fs" />
+    <Compile Include="Interaction.fs" />
+  </ItemGroup>
+
+</Project>

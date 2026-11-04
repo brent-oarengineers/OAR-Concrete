@@ -1,0 +1,29 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <!-- .NET Framework 4.8 is built into Windows 10/11, so users need nothing but the .xll -->
+    <TargetFramework>net48</TargetFramework>
+    <Version>0.1.0</Version>
+    <!-- copy FSharp.Core.dll next to the add-in so the .dna can pack it -->
+    <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="Functions.fs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="OAR.Concrete.Excel-AddIn.dna" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="ExcelDna.AddIn" Version="1.8.0" />
+    <!-- lets the .NET Framework 4.8 build run on any machine (including the GitHub build server) without the targeting pack -->
+    <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies" Version="1.0.3" PrivateAssets="all" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\OAR.Concrete.Core\OAR.Concrete.Core.fsproj" />
+  </ItemGroup>
+
+</Project>

@@ -1,0 +1,80 @@
+name: Build, test and release
+
+# Every push and pull request: build on Windows, run the benchmark tests, keep the add-in as a download.
+# Every push to main with a version number that has not been released yet: publish a GitHub Release
+# with the add-in, the calc template, the install script and the release notes from CHANGELOG.md.
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Run benchmark tests
+        run: dotnet run --project tests/OAR.Concrete.Tests -c Release -- --summary
+
+      - name: Build add-in
+        run: dotnet build src/OAR.Concrete.Excel -c Release
+
+      - name: Collect release files
+        shell: pwsh
+        run: |
+          $version = ([xml](Get-Content src/OAR.Concrete.Excel/OAR.Concrete.Excel.fsproj)).Project.PropertyGroup.Version | Where-Object { $_ } | Select-Object -First 1
+          "VERSION=$version" | Out-File -FilePath $env:GITHUB_ENV -Append
+          $pub = "src/OAR.Concrete.Excel/bin/Release/net48/publish"
+          if (-not (Test-Path "$pub/OAR.Concrete.Excel-AddIn64-packed.xll")) { $pub = "src/OAR.Concrete.Excel/bin/Release/net48" }
+          New-Item -ItemType Directory -Force dist | Out-Null
+          Copy-Item "$pub/OAR.Concrete.Excel-AddIn64-packed.xll" "dist/OAR.Concrete-AddIn64.xll"
+          Copy-Item "$pub/OAR.Concrete.Excel-AddIn-packed.xll"   "dist/OAR.Concrete-AddIn32.xll"
+          Copy-Item "template/RC Flexural Design - Base.xlsx"   "dist/RC Flexural Design - Base.xlsx"
+          Copy-Item "deploy/Install-OARConcrete.ps1"              "dist/"
+          Copy-Item "deploy/Install-OARConcrete.cmd"              "dist/"
+          Copy-Item "CHANGELOG.md"                             "dist/"
+          # release notes = this version's section of CHANGELOG.md
+          $text = Get-Content CHANGELOG.md -Raw
+          $m = [regex]::Match($text, "(?ms)^## v$([regex]::Escape($version))\b.*?(?=^## v|\z)")
+          $notes = if ($m.Success) { $m.Value } else { "Version $version" }
+          $notes | Out-File -Encoding utf8 dist/RELEASE_NOTES.md
+          Get-ChildItem dist
+
+      - name: Build the one-file release package
+        shell: pwsh
+        run: |
+          # Folder layout matches X:\Programs\Spreadsheets so it can be extracted straight over it
+          $root = "package"
+          $addin = "$root/Add-Ins/OAR Concrete"
+          $hist  = "$addin/Releases/v$env:VERSION"
+          New-Item -ItemType Directory -Force $hist, "$root/Calc Templates" | Out-Null
+          Copy-Item dist/OAR.Concrete-AddIn64.xll, dist/OAR.Concrete-AddIn32.xll, dist/Install-OARConcrete.cmd, dist/Install-OARConcrete.ps1, dist/CHANGELOG.md, dist/RELEASE_NOTES.md $addin
+          Copy-Item dist/OAR.Concrete-AddIn64.xll, dist/OAR.Concrete-AddIn32.xll $hist
+          Copy-Item "dist/RC Flexural Design - Base.xlsx" "$root/Calc Templates/"
+          Compress-Archive -Path "$root/*" -DestinationPath "dist/OAR-Concrete-v$env:VERSION.zip" -Force
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: OAR-Concrete-v${{ env.VERSION }}-build-${{ github.run_number }}
+          path: dist/
+
+      - name: Publish release (main only, new version only)
+        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $tag = "v$env:VERSION"
+          gh release view $tag 2>$null
+          if ($LASTEXITCODE -eq 0) { Write-Host "$tag already released - nothing to do"; exit 0 }
+          gh release create $tag "dist/OAR-Concrete-v$env:VERSION.zip" --title "OAR Concrete $tag" --notes-file dist/RELEASE_NOTES.md --target $env:GITHUB_SHA
