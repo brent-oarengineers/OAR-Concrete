@@ -15,7 +15,7 @@ biaxial bending): see *Groundwork for the column sheet* below.
 | `src/OAR.Concrete.Excel` | Excel-DNA add-in (net48): converts sheet ranges to the engine and back. One .xll per bitness. |
 | `tests/OAR.Concrete.Tests` | Benchmark tests (plain console runner): closed-form cases, `tools/reference_check.py`, Brent's pile script. |
 | `tools/` | `reference_check.py` – independent scipy re-implementation used to produce benchmark values; `Circular_Pile_AS3600.py` – Brent's original pile script (curvilinear benchmark). |
-| `template/` | `RC Flexural Design - Base.xlsx` and the script that builds it (`python template/build_template.py`). |
+| `template/` | `OAR - RC Flexural Design.xlsx` and the script that builds it (`python template/build_template.py`). |
 | `deploy/` | `Install-OARConcrete.cmd/.ps1` – per-user install / update at login. |
 
 ## How the engine works (in plain terms)
@@ -78,6 +78,11 @@ dn … Muo are for the reduced section. φ, kL and εsL are blank when N ≠ 0.
 `CRACKED` spills: dn, Icr (×10⁶ mm⁴), σst (largest bar tension), σsc, σc.
 Also `OAR.CONCRETE.MNCURVE(...)` (rows N, M, dn, φ, φN, φM – preview for the column sheet) and
 `OAR.CONCRETE.VERSION()`. Errors show as `#OAR! …` text, and the summary status then reads INPUT ERROR.
+
+**Add-in version check (as OAR Steel).** Each calc tab records the add-in version it was built for (cells V3:V7, beside
+the location frame, not printed). Under the title bar it reads *Calculated with OAR Concrete x.y.z*; if the installed
+add-in is older than the template, or not loaded, the line turns red ("⚠ Add-in … is older than this template – update
+the add-in and restart Excel") and the status box shows **UPDATE ADD-IN** on screen and on the printout.
 
 ### The flexural calc tab
 

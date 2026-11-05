@@ -1,4 +1,4 @@
-"""Builds template/RC Flexural Design - Base.xlsx (OAR house calc style).
+"""Builds template/OAR - RC Flexural Design.xlsx (OAR house calc style).
 
 Run from the repo root:  python template/build_template.py
 Needs openpyxl. The section-analysis cells call the OAR Concrete add-in (OAR.CONCRETE.ULT and
@@ -20,7 +20,7 @@ from openpyxl.worksheet.formula import ArrayFormula
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 LOGO = sys.argv[1] if len(sys.argv) > 1 else os.path.join(HERE, "assets", "oar-logo.png")
-OUT = sys.argv[2] if len(sys.argv) > 2 else os.path.join(HERE, "RC Flexural Design - Base.xlsx")
+OUT = sys.argv[2] if len(sys.argv) > 2 else os.path.join(HERE, "OAR - RC Flexural Design.xlsx")
 
 # ---------------- house-style helpers (oar-calc-sheet skill) ----------------
 F = "Arial"; GREEN = "465A52"; GREY = "595959"; TEXT = "262626"; IN_FILL = "F3EEE9"; CALC_FILL = "E6ECE9"
@@ -208,6 +208,13 @@ c = CC.cell(28, 2); c.value = ("Checked against RAM Concept 8.x (AS 3600-2018 Am
                                "s 230.8 → 215.8 MPa (linear interpolation). Note RAM takes s = b / (bars + 1); the calc tabs use b / bars.")
 c.font = font(7, i=True, color=GREY)
 
+# Add-in version check: the template records the add-in version it was built with (from the Excel project);
+# an older or missing add-in gets a red message under the title bar and UPDATE ADD-IN in the status box.
+import re as _re
+_fsproj = open(os.path.join(HERE, "..", "src", "OAR.Concrete.Excel", "OAR.Concrete.Excel.fsproj"), encoding="utf-8").read()
+TEMPLATE_VERSION = _re.search(r"<Version>([0-9]+\.[0-9]+\.[0-9]+)</Version>", _fsproj).group(1)
+_maj, _min, _pat = (int(v) for v in TEMPLATE_VERSION.split("."))
+
 # =========================== CALC TAB ===========================
 def build_tab(name, d):
     ws = wb.create_sheet(name)
@@ -242,7 +249,22 @@ def build_tab(name, d):
                    "MEMBER", name, "Copy this tab for additional slabs / beams.")
     ws["I3"].value = d["loc"]
     location_frame(ws, "Member")
-    c = ws["E7"]; c.value = '=IFERROR(OAR.CONCRETE.VERSION(),"OAR Concrete add-in not loaded")'; c.font = font(7, i=True, color=GREY)
+    # version check cells (column V, beside the location frame, not printed; same-sheet so copied tabs keep working)
+    ws.column_dimensions["U"].width = 3; ws.column_dimensions["V"].width = 12
+    lab("V2", "Add-in check", sz=7, color=GREY, i=True)
+    for rr, t, v in ((3, "template", TEMPLATE_VERSION),
+                     (4, "add-in", '=IFERROR(SUBSTITUTE(OAR.CONCRETE.VERSION(),"OAR Concrete ",""),"")'),
+                     (6, "template no.", _maj * 10000 + _min * 100 + _pat)):
+        lab(f"W{rr}", t, sz=7, color=GREY); c = ws[f"V{rr}"]; c.value = v; c.font = font(7, color=GREY); c.alignment = LEFT
+    p1 = 'FIND(".",$V$4)'; p2 = f'FIND(".",$V$4,{p1}+1)'
+    ws["V5"].value = f'=IFERROR(LEFT($V$4,{p1}-1)*10000+MID($V$4,{p1}+1,{p2}-{p1}-1)*100+MID($V$4,{p2}+1,9),0)'
+    ws["V7"].value = '=AND($V$4<>"",$V$5<$V$6)'
+    lab("W5", "add-in no.", sz=7, color=GREY); lab("W7", "add-in older?", sz=7, color=GREY)
+    for rr in (5, 7): ws[f"V{rr}"].font = font(7, color=GREY); ws[f"V{rr}"].alignment = LEFT
+    nm("tver", "V3"); nm("aver", "V4"); nm("aold", "V7")
+    c = ws["E7"]; c.font = font(7, i=True, color=GREY)
+    # B7 normally holds the copy-tab note; it carries the warning when the add-in is missing or older than the template
+    pend.append(("B7", '=IF(«aver»="","⚠ OAR Concrete add-in not loaded – results below are not calculated",IF(«aold»,"⚠ Add-in "&«aver»&" is older than this template ("&«tver»&") – update the add-in and restart Excel","Copy this tab for additional slabs / beams.   ·   Calculated with OAR Concrete "&«aver»))'))
 
     # ------------------------------------------------------------------ inputs (page 1, below the checks)
     r = 33; heading(ws, r, "Member and Concrete")
@@ -494,11 +516,13 @@ def build_tab(name, d):
     ws["B10"].font = font(12, True, color=GREEN); ws["B10"].alignment = LEFT
     CHK0, CHK1 = 15, 32
     c = ws["F10"]; c.value = f'=IF(COUNT(I{CHK0}:I{CHK1})=0,"–",MAX(I{CHK0}:I{CHK1}))'; c.font = font(12, True, color=GREEN); c.number_format = "0%"; c.alignment = LEFT
-    c = ws["I10"]; c.value = (f'=IF(COUNTIF(E{U0}:F{U1},"#OAR*")+COUNTIF(E{C1}:H{C2},"#OAR*")>0,"INPUT ERROR",'
-                              f'IF(COUNT(I{CHK0}:I{CHK1})=0,"PENDING",IF(OR(MAX(I{CHK0}:I{CHK1})>1,COUNTIF(J{CHK0}:J{CHK1},"NG")>0),"FAIL","PASS")))')
+    c = ws["I10"]; c.value = (f'=IF($V$7,"UPDATE ADD-IN",IF(COUNTIF(E{U0}:F{U1},"#OAR*")+COUNTIF(E{C1}:H{C2},"#OAR*")>0,"INPUT ERROR",'
+                              f'IF(COUNT(I{CHK0}:I{CHK1})=0,"PENDING",IF(OR(MAX(I{CHK0}:I{CHK1})>1,COUNTIF(J{CHK0}:J{CHK1},"NG")>0),"FAIL","PASS"))))')
     c.font = font(10, True, color=GREY); c.alignment = CEN
     for x in ws["I10:K10"][0]: x.border = BOX
     passfail_cf(ws, "I10:K10", "$I$10")
+    ws.conditional_formatting.add("I10:K10", FormulaRule(formula=['$I$10="UPDATE ADD-IN"'], fill=PatternFill(bgColor="C55A11"), font=Font(color="FFFFFF", bold=True)))
+    ws.conditional_formatting.add("B7", FormulaRule(formula=['OR($V$7,$V$4="")'], font=Font(color=RED, bold=True, italic=False)))
     def face(f): return (f'IF(«type»="Slab",«{f}mb»&"@"&«{f}mn»,«{f}mn»&«{f}mb»)&IF(N(«{f}xn»)>0," + "&«{f}xn»&«{f}xb»,"")')
     pend.append(("B11", f'="Top "&{face("t")}&"  ·  bottom "&{face("b")}&"  ·  "&«model»&IF(«LO»,"  ·  Class L: L steel only","")'))
     ws["B11"].font = font(7, color=GREY)
