@@ -4,6 +4,9 @@ Each version that reaches `main` is built, tested and published automatically as
 The calc sheet shows the version it was calculated with (under the green title bar).
 
 ## v0.2.0
+- Template renamed **OAR - RC Flexural Design.xlsx**.
+- Add-in version check: each calc tab records the add-in version it was built for; an older or missing add-in shows a
+  red message under the title bar and UPDATE ADD-IN in the status box (on screen and printed).
 - Crack control to AS 3600-2018 Amdt 2: σs.max from Tbl 8.6.2.2(A)/(B) (beams) and 9.5.2.1(A)/(B) (slabs, Ds ≤ / > 300)
   for w'max 0.2 / 0.3 / 0.4 mm (new input, default 0.3), new *Crack Control* data tab. Spacing ignores bars under half
   the largest diameter. *Legacy* keeps the previous OAR sheet limits. S1 now 108 %, B1 141 % (crack control governs).

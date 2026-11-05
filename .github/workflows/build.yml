@@ -39,7 +39,7 @@ jobs:
           New-Item -ItemType Directory -Force dist | Out-Null
           Copy-Item "$pub/OAR.Concrete.Excel-AddIn64-packed.xll" "dist/OAR.Concrete-AddIn64.xll"
           Copy-Item "$pub/OAR.Concrete.Excel-AddIn-packed.xll"   "dist/OAR.Concrete-AddIn32.xll"
-          Copy-Item "template/RC Flexural Design - Base.xlsx"   "dist/RC Flexural Design - Base.xlsx"
+          Copy-Item "template/OAR - RC Flexural Design.xlsx"   "dist/OAR - RC Flexural Design.xlsx"
           Copy-Item "deploy/Install-OARConcrete.ps1"              "dist/"
           Copy-Item "deploy/Install-OARConcrete.cmd"              "dist/"
           Copy-Item "CHANGELOG.md"                             "dist/"
@@ -60,7 +60,7 @@ jobs:
           New-Item -ItemType Directory -Force $hist, "$root/Calc Templates" | Out-Null
           Copy-Item dist/OAR.Concrete-AddIn64.xll, dist/OAR.Concrete-AddIn32.xll, dist/Install-OARConcrete.cmd, dist/Install-OARConcrete.ps1, dist/CHANGELOG.md, dist/RELEASE_NOTES.md $addin
           Copy-Item dist/OAR.Concrete-AddIn64.xll, dist/OAR.Concrete-AddIn32.xll $hist
-          Copy-Item "dist/RC Flexural Design - Base.xlsx" "$root/Calc Templates/"
+          Copy-Item "dist/OAR - RC Flexural Design.xlsx" "$root/Calc Templates/"
           Compress-Archive -Path "$root/*" -DestinationPath "dist/OAR-Concrete-v$env:VERSION.zip" -Force
 
       - uses: actions/upload-artifact@v4
