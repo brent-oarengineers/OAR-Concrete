@@ -15,7 +15,7 @@ biaxial bending): see *Groundwork for the column sheet* below.
 | `src/OAR.Concrete.Excel` | Excel-DNA add-in (net48): converts sheet ranges to the engine and back. One .xll per bitness. |
 | `tests/OAR.Concrete.Tests` | Benchmark tests (plain console runner): closed-form cases, `tools/reference_check.py`, Brent's pile script. |
 | `tools/` | `reference_check.py` – independent scipy re-implementation used to produce benchmark values; `Circular_Pile_AS3600.py` – Brent's original pile script (curvilinear benchmark). |
-| `template/` | `RC Flexural Design - Base.xlsx` and the script that builds it (`python template/build_template.py`). |
+| `template/` | `OAR - RC Flexural Design.xlsx` and the script that builds it (`python template/build_template.py`). |
 | `deploy/` | `Install-OARConcrete.cmd/.ps1` – per-user install / update at login. |
 
 ## How the engine works (in plain terms)
@@ -79,10 +79,19 @@ dn … Muo are for the reduced section. φ, kL and εsL are blank when N ≠ 0.
 Also `OAR.CONCRETE.MNCURVE(...)` (rows N, M, dn, φ, φN, φM – preview for the column sheet) and
 `OAR.CONCRETE.VERSION()`. Errors show as `#OAR! …` text, and the summary status then reads INPUT ERROR.
 
+**Add-in version check (as OAR Steel).** Each calc tab records the add-in version it was built for (cells V3:V7, beside
+the location frame, not printed). Under the title bar it reads *Calculated with OAR Concrete x.y.z*; if the installed
+add-in is older than the template, or not loaded, the line turns red ("⚠ Add-in … is older than this template – update
+the add-in and restart Excel") and the status box shows **UPDATE ADD-IN** on screen and on the printout.
+
 ### The flexural calc tab
 
 - **Member type** Slab / Beam. Slab: b = strip width (1000 per metre), mats as *bar @ spacing*, cover to the bar.
   Beam: *number × bar*, cover to the ligature plus the ligature size.
+- **Reinforcement layout**: *Top & bottom* (bar "None" on a face for a single layer at cover – the other face's steel
+  is then the tension steel in that direction) or *Single central mat* (one mat at D/2, extras on top of it in the Top
+  column and under it in the Bottom column; pool shells, slabs on ground). The *Tension Reinforcement by Direction*
+  table shows which bars are used for φ, minimum strength and crack control in each direction.
 - Each face: main bars plus extras (number within b, bar, layer 1 alongside or layer 2 inside with a clear gap).
   Mesh wires L6–L12 are on the Bars tab (Class L; SL92 = L9 @ 200).
 - ULS both directions with the selected stress block; the other block (rectangular ↔ curvilinear) is shown as an
@@ -107,6 +116,7 @@ With the add-in loaded the example tabs should read:
 
 | Tab | Member | Max utilisation | Governs |
 |---|---|---|---|
+| S2 | 150 pool floor, f'c 32, SL92 central + 5 N12 under the mat | 90 % PASS | shrinkage steel 263 vs 291 mm² (minor control) |
 | S1 | 175 slab, f'c 32, SL92 T&B + 3 N16 top (previous slab sheet example) | 108 % FAIL | hogging σscr 279 MPa vs 257.5 (Tbl 9.5.2.1(B), s 125, w' 0.3); φMuo 36.7 vs M* 37.3 kNm also NG (φ 0.65, Class L) |
 | S1, *L steel only* | same | 94 % PASS | Class L strain 1.42 % vs 1.5 %; hogging φMuo 44.4 (φ 0.85, kL 0.765) |
 | B1 | 1200 × 600 band beam, f'c 40, 7 + 4 N24 top (2 layers), 6 N24 bottom | 141 % FAIL | hogging σscr 332 MPa vs 234.9 (Tbl 8.6.2.2(B), s 175, w' 0.3) |

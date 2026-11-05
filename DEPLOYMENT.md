@@ -20,7 +20,7 @@
    Its folders match the server:
    - `Add-Ins\OAR Concrete\` – add-ins (64/32-bit), install script, changelog, release notes
    - `Add-Ins\OAR Concrete\Releases\v0.1.0\` – archive copy of this version's add-ins
-   - `Calc Templates\RC Flexural Design - Base.xlsx` – the calc template
+   - `Calc Templates\OAR - RC Flexural Design.xlsx` – the calc template
 
 Staff pick up the new add-in at their next login.
 
