@@ -140,18 +140,21 @@ wb.remove(wb.active)
 BARS = [
     ["None", 0, 0, 500, "N"], ["N10", 10, 80, 500, "N"], ["N12", 12, 110, 500, "N"], ["N16", 16, 200, 500, "N"], ["N20", 20, 310, 500, "N"],
     ["N24", 24, 450, 500, "N"], ["N28", 28, 620, 500, "N"], ["N32", 32, 800, 500, "N"], ["N36", 36, 1020, 500, "N"],
-    ["N40", 40, 1260, 500, "N"], ["R10", 10, 78, 250, "N"], ["R12", 12, 113, 250, "N"],
+    ["N40", 40, 1260, 500, "N"],
+    ["S10", 10, 80, 250, "N"], ["S12", 12, 110, 250, "N"], ["S16", 16, 200, 250, "N"], ["S20", 20, 310, 250, "N"],
+    ["S24", 24, 450, 250, "N"], ["S28", 28, 620, 250, "N"], ["S32", 32, 800, 250, "N"],
+    ["R10", 10, 78, 250, "N"], ["R12", 12, 113, 250, "N"],
     ["L6", 6.0, 28.3, 500, "L"], ["L7", 6.75, 35.8, 500, "L"], ["L8", 7.6, 45.4, 500, "L"], ["L9", 8.6, 58.1, 500, "L"],
     ["L10", 9.5, 70.9, 500, "L"], ["L11", 10.65, 89.1, 500, "L"], ["L12", 11.9, 111.2, 500, "L"],
 ]
 D_ = wb.create_sheet("Bars")
 setup_data_tab(D_, "Reinforcement – bar and mesh wire properties",
-               "AS/NZS 4671 nominal values. L = mesh wire (Class L; SL92 = L9 @ 200, RL1218 = L12 @ 200 main). Edit or add rows below; the calc tabs read this list.",
+               "AS/NZS 4671 nominal values. S = 250 MPa deformed bar (D250N, ductility Class N). L = mesh wire (Class L; SL92 = L9 @ 200, RL1218 = L12 @ 200 main). Edit or add rows below; the calc tabs read this list.",
                {"B": 10, "C": 10, "D": 10, "E": 10, "F": 10, "G": 40})
 for j, t in enumerate(["Bar", "db (mm)", "Ab (mm²)", "fsy (MPa)", "Class", "Note"]):
     c = D_.cell(4, 2 + j); c.value = t; c.font = font(8, True); c.fill = fill(HDR_FILL); c.border = BOX; c.alignment = CEN
 BAR0 = 5; BAR_LAST = BAR0 + len(BARS) + 5
-notes = {"None": "no bars (single-layer sections)", "R10": "plain round R250N", "L9": "SL92 mesh wire", "L12": "RL1218 main wire"}
+notes = {"None": "no bars (single-layer sections)", "S12": "deformed 250 MPa (D250N), N-bar areas", "R10": "plain round R250N", "L9": "SL92 mesh wire", "L12": "RL1218 main wire"}
 for i in range(BAR_LAST - BAR0 + 1):
     row = BARS[i] + [notes.get(BARS[i][0], "")] if i < len(BARS) else [None] * 6
     for j, v in enumerate(row):
