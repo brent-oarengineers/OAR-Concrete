@@ -111,7 +111,7 @@ Key values (engine = `tools/reference_check.py` to 4 figures): S1 Muo 32.73 / 56
 
 ## What is checked, and against what
 
-`dotnet run --project tests/OAR.Concrete.Tests -c Release` (78 checks):
+`dotnet run --project tests/OAR.Concrete.Tests -c Release` (86 checks):
 
 | Area | Benchmark | Tolerance |
 |---|---|---|
@@ -119,7 +119,7 @@ Key values (engine = `tools/reference_check.py` to 4 figures): S1 Muo 32.73 / 56
 | Rect / parabolic / curvilinear, doubly reinforced beam, sag and hog | `reference_check.py` (scipy quad + brentq) | 2e-5 |
 | Cracked section, singly reinforced | kd, Icr = bx³/3 + nAst(d − x)², σs, σc closed form | 1e-5 |
 | Cracked section with (n − 1)Asc, both directions | `reference_check.py` | 1e-5 |
-| RAM Concept Final Design Check, 1000 × 250 slab sections 11 and 21 (parabolic, Ec 29 910) | Muo, dn, φMu sag and hog (incl. top bars in tension), cracked σs and σc | 0.1 % / 1.5 % |
+| RAM Concept Final Design Check, 1000 × 250 slab: section 11, section 21, section 21 with 4/N12 top + RAM extras (parabolic, Ec 29 910) | Muo, dn, φMu sag and hog (incl. top bars in tension), cracked σs and σc | 0.1 % / 1.5 % |
 | Circular pile, curvilinear | Brent's `Circular_Pile_AS3600.py`: Mu 106.345 kNm, dn 85.81, kuo 0.2524 | 5e-5 |
 | Circle vs 720-gon of equal area; 8-bar pile rotated 45° | same Mu | 2e-4 / 1e-6 |
 | Class L, whole section / L steel only | S1 φ 0.65 vs φ 0.85, kL 0.765, φMuo 44.39; iterated case φ 0.8327, φMuo 606.43 (`reference_check.l_steel_only`) | 2e-5 |
@@ -127,7 +127,9 @@ Key values (engine = `tools/reference_check.py` to 4 figures): S1 Muo 32.73 / 56
 
 ## Open items to confirm before relying on them
 
-- **Crack-control stress limits.** The sheet uses the *legacy* limits from the previous OAR slab sheet (fits to the
+- **Crack-control stress limits.** RAM Concept data points so far (AS 3600-2018 Amdt 2, Tbl 9.5.2.1, w'max 0.3 mm,
+  by spacing): s 156.3 mm → 242.5 MPa, s 230.8 mm → 215.8 MPa (RAM spacing = b / (bars + 1)).
+  The sheet uses the *legacy* limits from the previous OAR slab sheet (fits to the
   AS 3600-2009 tables). AS 3600-2018 Amdt 2 replaced these with crack-width tables (Tbl 8.6.2.2 / 9.5.2.1) that are
   not built in – enter σs.max on the sheet from your copy, or ask for those tables to be added.
 - **Shrinkage steel** uses the previous sheet's interpolation on b D (the old sheet used b d).

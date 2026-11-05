@@ -181,6 +181,19 @@ let main argv =
     let c = Service.analyse s21 29910.0 90.0 5.843 0.0
     check "RAM s21 cracked  sigma_s at 5.843 kNm (43.61)" 43.61 c.SigSt 1.5e-2
     check "RAM s21 cracked  sigma_c at 5.843 kNm (1.506)" 1.506 c.SigC 1.5e-2
+    // section 21, higher live load: user 4/N12 top (440) + RAM-designed extras (279.8) at 47.98, 666.7 bottom at 212
+    let s21b = Section.rectangle 1000.0 250.0 [ bar 440.0 47.98 500.0; bar 279.8 47.98 500.0; bar 666.7 212.0 500.0 ]
+    let r = Ultimate.muo s21b ram 90.0
+    check "RAM s21 4N12  sag Muo 77.95" 77.95 r.Mu 1e-3
+    check "RAM s21 4N12  sag dn = 0.003 / 0.0001065" (0.003 / 0.0001065) r.Dn 1e-3
+    check "RAM s21 4N12  sag phi Mu 66.26" 66.26 (deltaF r) 1e-3
+    let r = Ultimate.muo s21b ram -90.0
+    check "RAM s21 4N12  hog Muo 74.78" 74.78 r.Mu 1e-3
+    check "RAM s21 4N12  hog dn = 0.003 / 0.0001198" (0.003 / 0.0001198) r.Dn 1e-3
+    check "RAM s21 4N12  hog phi Mu 63.56" 63.56 (deltaF r) 1e-3
+    let c = Service.analyse s21b 29910.0 90.0 8.687 0.0
+    check "RAM s21 4N12  cracked sigma_s at 8.687 kNm (64.97)" 64.97 c.SigSt 1.5e-2
+    check "RAM s21 4N12  cracked sigma_c at 8.687 kNm (2.237)" 2.237 c.SigC 1.5e-2
     // squash load: RAM uses gross Ac (0.85 × 32 × 250 000 + 500 × 1333.3 = 7467 kN); engine deducts the bars
     check "RAM s21  Nuo with gross Ac (7467)" 7467.0 ((alpha1 32.0 * 32.0 * 250000.0 + 500.0 * 1333.3) / 1000.0) 1e-4
 
