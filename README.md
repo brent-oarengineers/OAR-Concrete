@@ -89,8 +89,8 @@ the add-in and restart Excel") and the status box shows **UPDATE ADD-IN** on scr
 - **Member type** Slab / Beam. Slab: b = strip width (1000 per metre), mats as *bar @ spacing*, cover to the bar.
   Beam: *number × bar*, cover to the ligature plus the ligature size.
 - **Reinforcement layout**: *Top & bottom* (bar "None" on a face for a single layer at cover – the other face's steel
-  is then the tension steel in that direction) or *Single central mat* (one mat at D/2, extras on top of it in the Top
-  column and under it in the Bottom column; pool shells, slabs on ground). The *Tension Reinforcement by Direction*
+  is then the tension steel in that direction) or *Single mat – central / at top cover / at bottom cover* (one mat in the Top column at D/2 or at the
+  entered cover, extras on top of it in the Top column and under it in the Bottom column; pool shells, slabs on ground). The *Tension Reinforcement by Direction*
   table shows which bars are used for φ, minimum strength and crack control in each direction.
 - Each face: main bars plus extras (number within b, bar, layer 1 alongside or layer 2 inside with a clear gap).
   Class S bars S10–S32 (fsy 250 MPa) and mesh wires L6–L12 are on the Bars tab (Class L; SL92 = L9 @ 200).
