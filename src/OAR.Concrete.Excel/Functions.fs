@@ -10,7 +10,7 @@ open OAR.Concrete.Materials
 [<Literal>]
 let Category = "OAR Concrete"
 
-let private version = "0.1.0"
+let private version = "0.2.0"
 
 // ---------- conversion helpers (same as OAR Timber) ----------
 

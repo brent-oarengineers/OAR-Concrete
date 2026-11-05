@@ -171,6 +171,43 @@ BARTAB = f"Bars!$B${BAR0}:$F${BAR_LAST}"
 def barv(ref, col):  # col 2 db, 3 Ab, 4 fsy, 5 class
     return f"VLOOKUP({ref},{BARTAB},{col},FALSE)"
 
+# =========================== DATA TAB: Crack Control ===========================
+CC = wb.create_sheet("Crack Control")
+setup_data_tab(CC, "Crack control – maximum steel stress (AS 3600-2018 incl. Amdt 2)",
+               "σscr must not exceed the larger of Table A (largest bar diameter in the tension zone) and Table B (largest c/c spacing; "
+               "bars under half the largest diameter ignored). Linear interpolation between rows; outside the table the end row is used.",
+               {c: 9 for c in "BCDEFGHIJKLMNOP"})
+def cc_table(r0, c0, title, head, rows):
+    c = CC.cell(r0, c0); c.value = title; c.font = font(9, True, color=GREEN)
+    for j, t in enumerate(head):
+        x = CC.cell(r0 + 1, c0 + j); x.value = t; x.font = font(7, True); x.fill = fill(HDR_FILL); x.border = BOX
+        x.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+    CC.row_dimensions[r0 + 1].height = 26
+    for i, row in enumerate(rows):
+        for j, v in enumerate(row):
+            x = CC.cell(r0 + 2 + i, c0 + j); x.value = v; x.font = font(8, color="000000"); x.fill = fill(IN_FILL); x.border = BOX; x.alignment = CEN
+    return r0 + 2, r0 + 1 + len(rows)
+from openpyxl.utils import get_column_letter as _L
+def cc_names(name, r1, r2, c0, ncol):
+    wb.defined_names[name + "_X"] = DefinedName(name + "_X", attr_text=f"'Crack Control'!${_L(c0)}${r1}:${_L(c0)}${r2}")
+    wb.defined_names[name] = DefinedName(name, attr_text=f"'Crack Control'!${_L(c0+1)}${r1}:${_L(c0+ncol)}${r2}")
+r1, r2 = cc_table(5, 2, "Table 8.6.2.2(A) – beams, by bar diameter", ["db (mm)", "w' 0.2", "w' 0.3", "w' 0.4"],
+                  [[10, 190, 265, 335], [12, 175, 245, 305], [16, 155, 215, 270], [20, 140, 195, 240], [24, 125, 175, 215],
+                   [28, 115, 160, 200], [32, 105, 150, 185], [36, 100, 140, 175], [40, 90, 130, 165]])
+cc_names("CC_BA", r1, r2, 2, 3)
+r1, r2 = cc_table(5, 7, "Table 8.6.2.2(B) = 9.5.2.1(B) – by c/c spacing", ["s (mm)", "w' 0.2", "w' 0.3", "w' 0.4"],
+                  [[50, 200, 300, 400], [100, 170, 270, 360], [150, 155, 245, 330], [200, 145, 225, 300], [250, 135, 210, 280], [300, 125, 200, 260]])
+cc_names("CC_B", r1, r2, 7, 3)
+r1, r2 = cc_table(18, 2, "Table 9.5.2.1(A) – slabs, by bar diameter and overall depth Ds",
+                  ["db (mm)", "0.2, Ds ≤ 300", "0.2, Ds > 300", "0.3, Ds ≤ 300", "0.3, Ds > 300", "0.4, Ds ≤ 300", "0.4, Ds > 300"],
+                  [[6, 210, 230, 290, 315, 365, 390], [8, 195, 210, 260, 290, 340, 360], [10, 180, 190, 240, 265, 315, 335],
+                   [12, 165, 175, 225, 245, 290, 305], [16, 150, 155, 205, 215, 260, 270], [20, 140, 140, 190, 195, 235, 240],
+                   [24, 125, 125, 175, 175, 215, 215]])
+cc_names("CC_SA", r1, r2, 2, 6)
+c = CC.cell(28, 2); c.value = ("Checked against RAM Concept 8.x (AS 3600-2018 Amdt 2): slab w' 0.3 mm – db 15.96 → 205.2, s 156.3 → 242.5, "
+                               "s 230.8 → 215.8 MPa (linear interpolation). Note RAM takes s = b / (bars + 1); the calc tabs use b / bars.")
+c.font = font(7, i=True, color=GREY)
+
 # =========================== CALC TAB ===========================
 def build_tab(name, d):
     ws = wb.create_sheet(name)
@@ -178,7 +215,7 @@ def build_tab(name, d):
     def nm(n, ref): N[n] = "$" + "".join(ch for ch in ref if ch.isalpha()) + "$" + "".join(ch for ch in ref if ch.isdigit())
     def Fx(s):
         if not isinstance(s, str): return s
-        s = s.replace("«LO»", 'LEFT(«lmode»,1)="L"')
+        s = s.replace("«LO»", 'LEFT(«lmode»,1)="L"').replace("«LEG»", '«wmax»="Legacy"')
         for k in sorted(N, key=len, reverse=True): s = s.replace(f"«{k}»", N[k])
         assert "«" not in s, s
         return s
@@ -253,9 +290,11 @@ def build_tab(name, d):
     r = 60; heading(ws, r, "Crack Control and Shrinkage")
     table_header(ws, 61, [("E61", "Sagging +"), ("F61", "Hogging −")])
     lab("B62", "σs.max override (Ms*)"); IN("E62", d.get("ovs"), "0", name="ovs"); IN("F62", d.get("ovh"), "0", name="ovh"); U("G62", "MPa")
-    lab("H62", "blank = legacy table (calcs)", sz=7, color=GREY)
+    lab("H62", "blank = from the tables (calcs)", sz=7, color=GREY)
     lab("B63", "Shrinkage & temp.: degree of control"); IN("E63:F63", d.get("control", "Moderate"), name="control"); lab("H63", "slab only", sz=7, color=GREY)
     lab("B64", "Restraint factor (0 = free, 1 = fully restrained)"); IN("E64", d.get("restraint", 0.75), "0.00", name="restr")
+    lab("B65", "Crack width limit w'max (σs tables)"); IN("E65:F65", d.get("wmax", "0.3 mm"), name="wmax")
+    lab("H65", "Legacy = previous OAR sheet (2009 fits)", sz=7, color=GREY)
 
     # ------------------------------------------------------------------ calculations (page 2)
     # Reinforcement layers table → the add-in's bars argument (As | depth | fsy)
@@ -391,27 +430,44 @@ def build_tab(name, d):
 
     # Crack control limits
     r = CRK_END + 2; heading(ws, r, "Crack Control Limits")
-    r += 1; note(ws, r, "Legacy OAR limits (previous slab strip sheet): fits to AS 3600-2009 Tbl 8.6.1 / 9.4.1 – A by bar diameter, B by bar spacing, the larger applies.")
-    r += 1; note(ws, r, "AS 3600-2018 Amdt 2 tabulates σs by crack width (Tbl 8.6.2.2 / 9.5.2.1): enter σs.max in the inputs to use those values instead.")
+    r += 1; note(ws, r, '=IF(«LEG»,"Legacy OAR limits (previous slab sheet): fits to AS 3600-2009 Tbl 8.6.1 / 9.4.1 – A by bar diameter, B by bar spacing, the larger applies.",'
+                        'IF(«type»="Slab","Cl 9.5.2.1: σscr ≤ larger of Tbl 9.5.2.1(A) (largest db, by Ds) and 9.5.2.1(B) (largest c/c spacing), w\'max = "&«wmax»&".",'
+                        '"Cl 8.6.2.2: σscr ≤ larger of Tbl 8.6.2.2(A) (largest db) and 8.6.2.2(B) (largest c/c spacing), w\'max = "&«wmax»&"."))')
+    pend.append((f"B{r}", ws[f"B{r}"].value)); ws[f"B{r}"].value = None
+    r += 1; note(ws, r, "Spacing ignores bars smaller than half the largest diameter on the face (Cl 9.5.2.1(b)). Tables on the Crack Control tab; linear interpolation, end rows beyond the table.")
     table_header(ws, r + 1, [(f"E{r+1}", "Sagging +"), (f"F{r+1}", "Hogging −")])
     r += 2; sym(r, "db"); desc(r, "largest bar, tension face")
     CA(f"E{r}", "=MAX(N(«dbbm»),N(«dbbx»))", "0.0", name="dbx_s"); CA(f"F{r}", "=MAX(N(«dbtm»),N(«dbtx»))", "0.0", name="dbx_h"); U(f"G{r}", "mm")
     r += 1; sym(r, "s"); desc(r, '=IF(«type»="Slab","b / (bars in layer 1 of the face)","clear width / (n − 1), layer 1")')
-    def spacing(f):
-        n1 = f'(«n{f}m»+IF(«{f}xp»="Layer 2",0,«n{f}x»))'
-        return (f'=IF(«type»="Slab",«b»/{n1},IF({n1}<=1,0,(«b»-2*(«{f}cov»+{barv("«lig»", 2)})-«db{f}m»)/({n1}-1)))')
-    CA(f"E{r}", spacing("b"), "0", name="sp_s"); CA(f"F{r}", spacing("t"), "0", name="sp_h"); U(f"G{r}", "mm")
-    r += 1; sym(r, "σA"); desc(r, '=IF(AND(«type»="Slab",«D»<=300),"slab D ≤ 300: 580 − 114 ln db","760 − 173 ln db")')
-    for col, s in (("E", "s"), ("F", "h")):
-        CA(f"{col}{r}", f'=IF(«dbx_{s}»=0,"",IF(AND(«type»="Slab",«D»<=300),580-114*LN(«dbx_{s}»),760-173*LN(«dbx_{s}»)))', "0", name=f"sA_{s}")
+    def spacing(f, s_):
+        cnt_m = f'IF(N(«db{f}m»)>=0.5*«dbx_{s_}»,«n{f}m»,0)'
+        cnt_x = f'IF(OR(«{f}xp»="Layer 2",N(«db{f}x»)<0.5*«dbx_{s_}»),0,«n{f}x»)'
+        n1 = f'({cnt_m}+{cnt_x})'
+        return (f'=IF({n1}<=0,0,IF(«type»="Slab",«b»/{n1},IF({n1}<=1,0,(«b»-2*(«{f}cov»+{barv("«lig»", 2)})-«dbx_{s_}»)/({n1}-1))))')
+    CA(f"E{r}", spacing("b", "s"), "0", name="sp_s"); CA(f"F{r}", spacing("t", "h"), "0", name="sp_h"); U(f"G{r}", "mm")
+    def interp(xs, tbl, col, x):
+        xc = f"MIN(MAX({x},INDEX({xs},1)),INDEX({xs},ROWS({xs})))"
+        i = f"MIN(MATCH({xc},{xs},1),ROWS({xs})-1)"
+        return (f"(INDEX({tbl},{i},{col})+({xc}-INDEX({xs},{i}))*(INDEX({tbl},{i}+1,{col})-INDEX({tbl},{i},{col}))"
+                f"/(INDEX({xs},{i}+1)-INDEX({xs},{i})))")
+    WC = 'MATCH(«wmax»,{"0.2 mm","0.3 mm","0.4 mm"},0)'
+    r += 1; sym(r, "σA"); desc(r, '=IF(«LEG»,IF(AND(«type»="Slab",«D»<=300),"580 − 114 ln db","760 − 173 ln db"),IF(«type»="Slab","Tbl 9.5.2.1(A), Ds "&IF(«D»<=300,"≤","> ")&"300","Tbl 8.6.2.2(A)"))')
+    for col, s_ in (("E", "s"), ("F", "h")):
+        x = f"«dbx_{s_}»"
+        leg = f'IF(AND(«type»="Slab",«D»<=300),580-114*LN({x}),760-173*LN({x}))'
+        slab = interp("CC_SA_X", "CC_SA", f"2*({WC}-1)+1+(«D»>300)", x)
+        beam = interp("CC_BA_X", "CC_BA", WC, x)
+        CA(f"{col}{r}", f'=IF({x}=0,"",IF(«LEG»,{leg},IF(«type»="Slab",{slab},{beam})))', "0", name=f"sA_{s_}")
     U(f"G{r}", "MPa")
-    r += 1; sym(r, "σB"); desc(r, "400 − 0.8 s")
-    for col, s in (("E", "s"), ("F", "h")): CA(f"{col}{r}", f'=IF(«sp_{s}»=0,"",400-0.8*«sp_{s}»)', "0", name=f"sB_{s}")
+    r += 1; sym(r, "σB"); desc(r, '=IF(«LEG»,"400 − 0.8 s",IF(«type»="Slab","Tbl 9.5.2.1(B)","Tbl 8.6.2.2(B)"))')
+    for col, s_ in (("E", "s"), ("F", "h")):
+        x = f"«sp_{s_}»"
+        CA(f"{col}{r}", f'=IF({x}=0,"",IF(«LEG»,400-0.8*{x},{interp("CC_B_X", "CC_B", WC, x)}))', "0", name=f"sB_{s_}")
     U(f"G{r}", "MPa")
     r += 1; sym(r, "σs.max"); desc(r, "adopted: input, or max(σA, σB)")
-    for col, s in (("E", "s"), ("F", "h")):
-        ov = "«ovs»" if s == "s" else "«ovh»"
-        CA(f"{col}{r}", f'=IF(N({ov})>0,{ov},MAX(N(«sA_{s}»),N(«sB_{s}»)))', "0", name=f"smax_{s}")
+    for col, s_ in (("E", "s"), ("F", "h")):
+        ov = "«ovs»" if s_ == "s" else "«ovh»"
+        CA(f"{col}{r}", f'=IF(N({ov})>0,{ov},MAX(N(«sA_{s_}»),N(«sB_{s_}»)))', "0", name=f"smax_{s_}")
     U(f"G{r}", "MPa")
     r += 1; sym(r, "0.8 fsy"); desc(r, "limit for Ms1*")
     CA(f"E{r}", "=0.8*«fsy_s»", "0", name="s08_s"); CA(f"F{r}", "=0.8*«fsy_h»", "0", name="s08_h"); U(f"G{r}", "MPa")
@@ -497,7 +553,7 @@ def build_tab(name, d):
     def dvl(formula, ref):
         v = DataValidation(type="list", formula1=formula, allow_blank=True); ws.add_data_validation(v); v.add(ref)
     dvl('"Slab,Beam"', "E34"); dvl('"Rectangular,Curvilinear,Parabolic"', "E38"); dvl("=BarList", "E45:F45"); dvl("=BarList", "E48:F48")
-    dvl('"Layer 1,Layer 2"', "E49:F49"); dvl("=BarList", "E51"); dvl('"Beams or walls,Columns"', "E52"); dvl('"Minor,Moderate,Strong"', "E63"); dvl('"Whole section 0.65,L steel only"', "E53")
+    dvl('"Layer 1,Layer 2"', "E49:F49"); dvl("=BarList", "E51"); dvl('"Beams or walls,Columns"', "E52"); dvl('"Minor,Moderate,Strong"', "E63"); dvl('"Whole section 0.65,L steel only"', "E53"); dvl('"0.2 mm,0.3 mm,0.4 mm,Legacy"', "E65")
     rules = [("E51", '«type»<>"Beam"', "B51"),
              ("E52:F52", '«type»<>"Slab"', "B52"),
              ("E63:F64", '«type»<>"Slab"', "B63:B64"),
@@ -510,7 +566,7 @@ def build_tab(name, d):
     for rr in range(15, LAST + 1):
         if ws.row_dimensions[rr].height is None: ws.row_dimensions[rr].height = 14
     ws.print_area = f"A1:K{LAST}"
-    ws.row_breaks.append(Break(id=64))
+    ws.row_breaks.append(Break(id=65))
     ws.row_breaks.append(Break(id=ULT_END + 1))
     return ws, N
 
@@ -529,7 +585,7 @@ b1 = dict(loc="Helensvale – wide beam 3", type="Beam", b=1200, D=600, fc=40, m
 EXAMPLES = (("S1", s1), ("B1", b1))
 if __name__ == "__main__":
     for nm_, dd in EXAMPLES: build_tab(nm_, dd)
-    wb._sheets = [wb[n] for n in ("S1", "B1", "Bars")]
+    wb._sheets = [wb[n] for n in ("S1", "B1", "Bars", "Crack Control")]
     wb.active = 0
     from openpyxl.workbook.properties import CalcProperties
     wb.calculation = CalcProperties(fullCalcOnLoad=True)

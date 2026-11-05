@@ -28,7 +28,8 @@ biaxial bending): see *Groundwork for the column sheet* below.
      extreme fibre", written as a stress–strain law so the same integrator handles any shape.
    - *Curvilinear*: the Cl 3.1.4 curve from your `Circular_Pile_AS3600.py` (σcp = 0.9 f'c, εcp = 4.11 σcp^0.75 / Ec,
      n = Ec / (Ec − Ecp), k = 1 rising, max(0.67 + σcp/62, 1) falling).
-   - *Parabolic*: parabola to 0.9 f'c at ε0 = 0.002, flat to εcu = 0.003.
+   - *Parabolic*: parabola to 0.9 f'c at ε0 = 2 × 0.9 f'c / Ec (Hognestad, initial slope Ec), flat to εcu = 0.003.
+     This is the block RAM Concept uses, so results compare directly with its section audits.
    - Steel: elastic – perfectly plastic, Es 200 GPa.
 2. **Geometry.fs** – concrete regions: polygons, circles, and voids (for hollow sections later). The analysis cuts
    the compression zone into thin bands parallel to the neutral axis. A polygon band is found by clipping the polygon
@@ -92,7 +93,12 @@ Also `OAR.CONCRETE.MNCURVE(...)` (rows N, M, dn, φ, φN, φM – preview for th
   1.5 % (Class L uniform elongation); in whole-section mode it is shown as info.
 - Minimum strength: Muo ≥ 1.2 Z f'ct.f, or deemed-to-comply Ast ≥ αb (D/d)² f'ct.f/fsy · bd (OK* when only the
   deemed route passes). αb 0.20 beams; slabs 0.19 on beams/walls, 0.24 on columns.
-- SLS: σscr under Ms* ≤ σs.max and σscr.1 under Ms1* ≤ 0.8 fsy, both faces; bar spacing ≤ 300 (beam) or
+- SLS: σscr under Ms* ≤ σs.max and σscr.1 under Ms1* ≤ 0.8 fsy, both faces. σs.max = larger of Table A (largest
+  bar diameter; slabs by Ds ≤ / > 300) and Table B (c/c spacing, bars under half the largest diameter ignored), AS 3600-2018
+  Amdt 2 Tbl 8.6.2.2 (beams) / 9.5.2.1 (slabs) for w'max 0.2, 0.3 or 0.4 mm (input, default 0.3), linear interpolation.
+  *Legacy* gives the previous OAR sheet's fits to the 2009 tables. The tables are on the *Crack Control* tab and
+  reproduce RAM Concept's limits (205.2, 242.5, 215.8 MPa); RAM takes spacing as b / (bars + 1), the sheet b / bars.
+  Bar spacing ≤ 300 (beam) or
   min(2D, 300) (slab); slab shrinkage & temperature steel as the previous OAR slab sheet.
 
 ## Checking the template in Excel
@@ -101,16 +107,16 @@ With the add-in loaded the example tabs should read:
 
 | Tab | Member | Max utilisation | Governs |
 |---|---|---|---|
-| S1 | 175 slab, f'c 32, SL92 T&B + 3 N16 top (previous slab sheet example) | 102 % FAIL | hogging: φMuo 36.7 vs M* 37.3 kNm (φ = 0.65, Class L mesh in the tension face) |
+| S1 | 175 slab, f'c 32, SL92 T&B + 3 N16 top (previous slab sheet example) | 108 % FAIL | hogging σscr 279 MPa vs 257.5 (Tbl 9.5.2.1(B), s 125, w' 0.3); φMuo 36.7 vs M* 37.3 kNm also NG (φ 0.65, Class L) |
 | S1, *L steel only* | same | 94 % PASS | Class L strain 1.42 % vs 1.5 %; hogging φMuo 44.4 (φ 0.85, kL 0.765) |
-| B1 | 1200 × 600 band beam, f'c 40, 7 + 4 N24 top (2 layers), 6 N24 bottom | 128 % FAIL | hogging σscr 332 MPa vs 260 MPa (legacy table B, s = 175) |
+| B1 | 1200 × 600 band beam, f'c 40, 7 + 4 N24 top (2 layers), 6 N24 bottom | 141 % FAIL | hogging σscr 332 MPa vs 234.9 (Tbl 8.6.2.2(B), s 175, w' 0.3) |
 
 Key values (engine = `tools/reference_check.py` to 4 figures): S1 Muo 32.73 / 56.43 kNm, dn 25.25 mm both ways,
 σscr 158 / 279 MPa; B1 Muo 751.2 / 1176.9 kNm, σscr 75.5 / 331.5 MPa.
 
 ## What is checked, and against what
 
-`dotnet run --project tests/OAR.Concrete.Tests -c Release` (60 checks):
+`dotnet run --project tests/OAR.Concrete.Tests -c Release` (86 checks):
 
 | Area | Benchmark | Tolerance |
 |---|---|---|
@@ -118,6 +124,7 @@ Key values (engine = `tools/reference_check.py` to 4 figures): S1 Muo 32.73 / 56
 | Rect / parabolic / curvilinear, doubly reinforced beam, sag and hog | `reference_check.py` (scipy quad + brentq) | 2e-5 |
 | Cracked section, singly reinforced | kd, Icr = bx³/3 + nAst(d − x)², σs, σc closed form | 1e-5 |
 | Cracked section with (n − 1)Asc, both directions | `reference_check.py` | 1e-5 |
+| RAM Concept Final Design Check, 1000 × 250 slab: section 11, section 21, section 21 with 4/N12 top + RAM extras (parabolic, Ec 29 910) | Muo, dn, φMu sag and hog (incl. top bars in tension), cracked σs and σc | 0.1 % / 1.5 % |
 | Circular pile, curvilinear | Brent's `Circular_Pile_AS3600.py`: Mu 106.345 kNm, dn 85.81, kuo 0.2524 | 5e-5 |
 | Circle vs 720-gon of equal area; 8-bar pile rotated 45° | same Mu | 2e-4 / 1e-6 |
 | Class L, whole section / L steel only | S1 φ 0.65 vs φ 0.85, kL 0.765, φMuo 44.39; iterated case φ 0.8327, φMuo 606.43 (`reference_check.l_steel_only`) | 2e-5 |
@@ -125,10 +132,10 @@ Key values (engine = `tools/reference_check.py` to 4 figures): S1 Muo 32.73 / 56
 
 ## Open items to confirm before relying on them
 
-- **Crack-control stress limits.** The sheet uses the *legacy* limits from the previous OAR slab sheet (fits to the
-  AS 3600-2009 tables). AS 3600-2018 Amdt 2 replaced these with crack-width tables (Tbl 8.6.2.2 / 9.5.2.1) that are
-  not built in – enter σs.max on the sheet from your copy, or ask for those tables to be added.
+- **Crack widths by calculation** (Cl 8.6.2.3) are not built in; the tables (Cl 8.6.2.2 / 9.5.2.1) are.
 - **Shrinkage steel** uses the previous sheet's interpolation on b D (the old sheet used b d).
+- **Squash load**: RAM Concept uses gross Ac (Nuo = α1 f'c Ag + fsy As); the engine deducts the bar area. Decide
+  before the column sheet.
 - **φ for compression members** (MNCURVE default φ0 = 0.65): confirm against Table 2.2.2 before the column sheet.
 - Not covered: shear, torsion, deflection, detailing.
 

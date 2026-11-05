@@ -33,9 +33,10 @@ def law(model, fc, ec):
     if model == "rect":
         e1 = ECU * (1 - gamma(fc))
         return (lambda e: alpha2(fc) * fc if e >= e1 else 0.0), e1
-    if model == "para":
+    if model == "para":   # Hognestad form, as RAM Concept: peak 0.9 f'c at e0 = 2 x 0.9 f'c / Ec
         fm = 0.9 * fc
-        return (lambda e: 0.0 if e <= 0 else (fm * (2 * e / 0.002 - (e / 0.002) ** 2) if e < 0.002 else fm)), 0.002
+        e0 = 2 * fm / ec
+        return (lambda e: 0.0 if e <= 0 else (fm * (2 * e / e0 - (e / e0) ** 2) if e < e0 else fm)), e0
     if model == "curv":   # Brent's AS3600StressCurve
         scp = 0.9 * fc
         ecp = 4.11 * scp ** 0.75 / ec

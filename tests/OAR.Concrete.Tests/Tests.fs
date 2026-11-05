@@ -41,8 +41,8 @@ let main argv =
     check "Rect block  Cc = T" 275.0 r.Cc 1e-7
     // other stress-strain laws (reference_check.py)
     let r = Ultimate.muo slab (rc 32.0 Parabolic) 90.0
-    check "Parabolic   dn (reference_check)" 12.2768 r.Dn 2e-5
-    check "Parabolic   Muo (reference_check)" 43.7335 r.Mu 2e-5
+    check "Parabolic   dn (reference_check)" 12.1271 r.Dn 2e-5
+    check "Parabolic   Muo (reference_check)" 43.7392 r.Mu 2e-5
     let r = Ultimate.muo slab (rc 32.0 Curvilinear) 90.0
     check "Curvilinear dn (reference_check)" 12.6065 r.Dn 2e-5
     check "Curvilinear Muo (reference_check)" 43.5819 r.Mu 2e-5
@@ -53,8 +53,8 @@ let main argv =
     let cases =
         [ Rectangular, 90.0, 130.2298, 767.3464
           Rectangular, -90.0, 77.7833, 460.7481
-          Parabolic, 90.0, 129.0374, 772.1905
-          Parabolic, -90.0, 75.7264, 462.6211
+          Parabolic, 90.0, 131.3467, 772.0693
+          Parabolic, -90.0, 76.2449, 462.4016
           Curvilinear, 90.0, 134.5312, 765.9069
           Curvilinear, -90.0, 77.2281, 460.2367 ]
     for model, theta, dn, mu in cases do
@@ -147,6 +147,55 @@ let main argv =
     check "Iterated  phi Muo (reference 606.4303)" 606.4303 (l.Phi * l.Ult.Mu) 2e-5
     let n = Flexure.capacity slab (rc 32.0 Rectangular) 90.0 [ false ] Flexure.LSteelOnly
     check "No Class L bars  kL = 1, phi from kuo" (Design.phiBending Design.ClassN n.Ult.Kuo) n.Phi 1e-12
+
+    // ---------------- RAM Concept 8.x, AS 3600-2018 Amdt 2, Final Design Check (job "Auditing 1C-1") ----------------
+    // 1000 x 250 strip, f'c 32, Ec 29 910 (RAM final Ec), fsy 500. RAM: parabolic block, 0.9 f'c, εcu 0.003.
+    // RAM reports 4 significant figures, so tolerances are 0.1 % (strength) and 1.5 % (cracked stresses).
+    let ram = concrete 32.0 (Some 29910.0) Parabolic
+    let deltaF (r: Ultimate.Result) = Design.phiBending Design.ClassN r.Kuo * r.Mu
+    // section 11: 666.7 mm² bottom at 212 (3.33 N16 per m)
+    let s11 = Section.rectangle 1000.0 250.0 [ bar 666.7 212.0 500.0 ]
+    let r = Ultimate.muo s11 ram 90.0
+    check "RAM s11 sag  Muo 68.67" 68.67 r.Mu 1e-3
+    check "RAM s11 sag  dn = 0.003 / 0.0002037" (0.003 / 0.0002037) r.Dn 1e-3
+    check "RAM s11 sag  phi Mu 58.37" 58.37 (deltaF r) 1e-3
+    let r = Ultimate.muo s11 ram -90.0
+    check "RAM s11 hog  Muo 10.66 (bottom bars only)" 10.66 r.Mu 1.5e-3
+    check "RAM s11 hog  phi 0.82 (kuo 0.39)" 0.82 (Design.phiBending Design.ClassN r.Kuo) 1e-3
+    let c = Service.analyse s11 29910.0 90.0 6.269 0.0
+    check "RAM s11 cracked  sigma_s at 6.269 kNm (47.02)" 47.02 c.SigSt 1.5e-2
+    check "RAM s11 cracked  sigma_c at 6.269 kNm (1.586)" 1.586 c.SigC 1.5e-2
+    let c = Service.analyse s11 29910.0 90.0 6.697 0.0
+    check "RAM s11 cracked  sigma_s at 6.697 kNm (50.15)" 50.15 c.SigSt 1.5e-2
+    // section 21: 666.6 mm² top at 47.98 and 666.7 mm² bottom at 212
+    let s21 = Section.rectangle 1000.0 250.0 [ bar 666.6 47.98 500.0; bar 666.7 212.0 500.0 ]
+    let r = Ultimate.muo s21 ram 90.0
+    check "RAM s21 sag  Muo 77.67 (top bars in tension)" 77.67 r.Mu 1e-3
+    check "RAM s21 sag  dn = 0.003 / 0.0001084" (0.003 / 0.0001084) r.Dn 1e-3
+    check "RAM s21 sag  phi Mu 66.02" 66.02 (deltaF r) 1e-3
+    check "RAM s21 sag  top bar stress 440 MPa (tension)" 440.0 (0.003 * (47.98 - r.Dn) / r.Dn * 200000.0) 2e-3
+    let r = Ultimate.muo s21 ram -90.0
+    check "RAM s21 hog  Muo 70.19" 70.19 r.Mu 1e-3
+    check "RAM s21 hog  dn = 0.003 / 0.0001226" (0.003 / 0.0001226) r.Dn 1e-3
+    check "RAM s21 hog  phi Mu 59.66" 59.66 (deltaF r) 1e-3
+    let c = Service.analyse s21 29910.0 90.0 5.843 0.0
+    check "RAM s21 cracked  sigma_s at 5.843 kNm (43.61)" 43.61 c.SigSt 1.5e-2
+    check "RAM s21 cracked  sigma_c at 5.843 kNm (1.506)" 1.506 c.SigC 1.5e-2
+    // section 21, higher live load: user 4/N12 top (440) + RAM-designed extras (279.8) at 47.98, 666.7 bottom at 212
+    let s21b = Section.rectangle 1000.0 250.0 [ bar 440.0 47.98 500.0; bar 279.8 47.98 500.0; bar 666.7 212.0 500.0 ]
+    let r = Ultimate.muo s21b ram 90.0
+    check "RAM s21 4N12  sag Muo 77.95" 77.95 r.Mu 1e-3
+    check "RAM s21 4N12  sag dn = 0.003 / 0.0001065" (0.003 / 0.0001065) r.Dn 1e-3
+    check "RAM s21 4N12  sag phi Mu 66.26" 66.26 (deltaF r) 1e-3
+    let r = Ultimate.muo s21b ram -90.0
+    check "RAM s21 4N12  hog Muo 74.78" 74.78 r.Mu 1e-3
+    check "RAM s21 4N12  hog dn = 0.003 / 0.0001198" (0.003 / 0.0001198) r.Dn 1e-3
+    check "RAM s21 4N12  hog phi Mu 63.56" 63.56 (deltaF r) 1e-3
+    let c = Service.analyse s21b 29910.0 90.0 8.687 0.0
+    check "RAM s21 4N12  cracked sigma_s at 8.687 kNm (64.97)" 64.97 c.SigSt 1.5e-2
+    check "RAM s21 4N12  cracked sigma_c at 8.687 kNm (2.237)" 2.237 c.SigC 1.5e-2
+    // squash load: RAM uses gross Ac (0.85 × 32 × 250 000 + 500 × 1333.3 = 7467 kN); engine deducts the bars
+    check "RAM s21  Nuo with gross Ac (7467)" 7467.0 ((alpha1 32.0 * 32.0 * 250000.0 + 500.0 * 1333.3) / 1000.0) 1e-4
 
     printfn ""
     printfn "%d checks, %d failed" count failures
