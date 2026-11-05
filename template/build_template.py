@@ -138,7 +138,7 @@ wb.remove(wb.active)
 # =========================== DATA TAB: Bars ===========================
 # AS/NZS 4671 nominal areas. L = mesh wires (Class L, e.g. SL92 = L9 @ 200). R = plain round (R250N).
 BARS = [
-    ["N10", 10, 80, 500, "N"], ["N12", 12, 110, 500, "N"], ["N16", 16, 200, 500, "N"], ["N20", 20, 310, 500, "N"],
+    ["None", 0, 0, 500, "N"], ["N10", 10, 80, 500, "N"], ["N12", 12, 110, 500, "N"], ["N16", 16, 200, 500, "N"], ["N20", 20, 310, 500, "N"],
     ["N24", 24, 450, 500, "N"], ["N28", 28, 620, 500, "N"], ["N32", 32, 800, 500, "N"], ["N36", 36, 1020, 500, "N"],
     ["N40", 40, 1260, 500, "N"], ["R10", 10, 78, 250, "N"], ["R12", 12, 113, 250, "N"],
     ["L6", 6.0, 28.3, 500, "L"], ["L7", 6.75, 35.8, 500, "L"], ["L8", 7.6, 45.4, 500, "L"], ["L9", 8.6, 58.1, 500, "L"],
@@ -151,7 +151,7 @@ setup_data_tab(D_, "Reinforcement – bar and mesh wire properties",
 for j, t in enumerate(["Bar", "db (mm)", "Ab (mm²)", "fsy (MPa)", "Class", "Note"]):
     c = D_.cell(4, 2 + j); c.value = t; c.font = font(8, True); c.fill = fill(HDR_FILL); c.border = BOX; c.alignment = CEN
 BAR0 = 5; BAR_LAST = BAR0 + len(BARS) + 5
-notes = {"R10": "plain round R250N", "L9": "SL92 mesh wire", "L12": "RL1218 main wire"}
+notes = {"None": "no bars (single-layer sections)", "R10": "plain round R250N", "L9": "SL92 mesh wire", "L12": "RL1218 main wire"}
 for i in range(BAR_LAST - BAR0 + 1):
     row = BARS[i] + [notes.get(BARS[i][0], "")] if i < len(BARS) else [None] * 6
     for j, v in enumerate(row):
@@ -222,7 +222,7 @@ def build_tab(name, d):
     def nm(n, ref): N[n] = "$" + "".join(ch for ch in ref if ch.isalpha()) + "$" + "".join(ch for ch in ref if ch.isdigit())
     def Fx(s):
         if not isinstance(s, str): return s
-        s = s.replace("«LO»", 'LEFT(«lmode»,1)="L"').replace("«LEG»", '«wmax»="Legacy"')
+        s = s.replace("«LO»", 'LEFT(«lmode»,1)="L"').replace("«LEG»", '«wmax»="Legacy"').replace("«CEN»", '«layout»="Single central mat"')
         for k in sorted(N, key=len, reverse=True): s = s.replace(f"«{k}»", N[k])
         assert "«" not in s, s
         return s
@@ -276,8 +276,12 @@ def build_tab(name, d):
     lab("B39", "Ec override"); IN("E39", d.get("ec"), "0", name="ecin"); U("F39", "MPa"); lab("H39", "blank = Table 3.1.2", sz=7, color=GREY)
     lab("B40", "Creep factor for SLS stresses, φcc"); IN("E40", d.get("phicc", 0), "0.0", name="phicc"); lab("H40", "0 = short-term n = Es / Ec", sz=7, color=GREY)
 
+    lab("B41", "Reinforcement layout"); IN("E41:F41", d.get("layout", "Top & bottom"), name="layout")
+    lab("H41", "central: one mat at D/2, extras above / below it", sz=7, color=GREY)
     r = 42; heading(ws, r, "Reinforcement")
     table_header(ws, 43, [("E43", "Top"), ("F43", "Bottom")])
+    pend.append(("E43", '=IF(«CEN»,"Mat / above","Top")')); pend.append(("F43", '=IF(«CEN»,"Below mat","Bottom")'))
+    lab("H45", 'bar "None" = no mat on that face', sz=7, color=GREY)
     rows = [
         (44, "Cover (slab: to bar; beam: to ligature)", "cov", "0", "mm"),
         (45, '=IF(«type»="Slab","Main mat – bar","Main bars – bar")', "mb", None, ""),
@@ -326,25 +330,31 @@ def build_tab(name, d):
                           ("G68", "fsy (MPa)"), ("H68", "db (mm)"), ("I68", "Class"), ("J68:K68", "bars in b")])
     # effective cover to the outer bar = cover (+ ligature for a beam)
     LIG = f'IF(«type»="Beam",{barv("«lig»", 2)},0)'
-    def area_main(f): return f'IF(«type»="Slab",{barv(f"«{f}mb»", 3)}*«b»/«{f}mn»,«{f}mn»*{barv(f"«{f}mb»", 3)})'
+    def area_main(f):
+        a = f'IF(OR(«{f}mb»="",«{f}mb»="None",N(«{f}mn»)=0),0,IF(«type»="Slab",{barv(f"«{f}mb»", 3)}*«b»/«{f}mn»,«{f}mn»*{barv(f"«{f}mb»", 3)}))'
+        return f'IF(«CEN»,0,{a})' if f == "b" else a
     def db(key): return f'IFERROR({barv(key, 2)},0)'
     layers = [
         (69, "Top – main", "t", "m"), (70, "Top – extra", "t", "x"), (71, "Bottom – main", "b", "m"), (72, "Bottom – extra", "b", "x")]
+    cen_lab = {69: "Central mat", 70: "Extra – above mat", 71: "Bottom – main", 72: "Extra – below mat"}
     for rr, t, f, k in layers:
-        ws.merge_cells(f"B{rr}:C{rr}"); lab(f"B{rr}", t, sz=8)
+        ws.merge_cells(f"B{rr}:C{rr}"); lab(f"B{rr}", t, sz=8); pend.append((f"B{rr}", f'=IF(«CEN»,"{cen_lab[rr]}","{t}")'))
         if k == "m":
-            pend.append((f"D{rr}", f'=«{f}mb»&IF(«type»="Slab"," @ "&«{f}mn»&" ("&TEXT({barv(f"«{f}mb»", 3)}*1000/«{f}mn»,"0")&" mm²/m)"," × "&«{f}mn»)'))
+            pend.append((f"D{rr}", f'=IF(E{rr}=0,IF(AND(«CEN»,"{f}"="b"),"– (central mat above)","none"),«{f}mb»&IF(«type»="Slab"," @ "&«{f}mn»&" ("&TEXT({barv(f"«{f}mb»", 3)}*1000/«{f}mn»,"0")&" mm²/m)"," × "&«{f}mn»))'))
             area = area_main(f)
             dep_off = f'(«{f}cov»+{LIG}+{db(f"«{f}mb»")}/2)'
-            nbars = f'IF(«type»="Slab",«b»/«{f}mn»,«{f}mn»)'
+            nbars = f'IF(E{rr}=0,0,IF(«type»="Slab",«b»/«{f}mn»,«{f}mn»))'
         else:
-            pend.append((f"D{rr}", f'=IF(N(«{f}xn»)=0,"none",«{f}xn»&" × "&«{f}xb»&IF(«{f}xp»="Layer 2"," (layer 2)",""))'))
-            area = f'IF(N(«{f}xn»)=0,0,«{f}xn»*{barv(f"«{f}xb»", 3)})'
+            pend.append((f"D{rr}", f'=IF(E{rr}=0,"none",«{f}xn»&" × "&«{f}xb»&IF(«CEN»,IF("{f}"="t"," on top of mat"," under mat"),IF(«{f}xp»="Layer 2"," (layer 2)","")))'))
+            area = f'IF(OR(N(«{f}xn»)=0,«{f}xb»="",«{f}xb»="None"),0,«{f}xn»*{barv(f"«{f}xb»", 3)})'
             dep_off = (f'(«{f}cov»+{LIG}+IF(«{f}xp»="Layer 2",{db(f"«{f}mb»")}+«{f}gap»+{db(f"«{f}xb»")}/2,{db(f"«{f}xb»")}/2))')
-            nbars = f'N(«{f}xn»)'
+            nbars = f'IF(E{rr}=0,0,N(«{f}xn»))'
         ws[f"D{rr}"].font = font(8, color=GREY)
         CA(f"E{rr}", f"={area}", "0", name=f"As{f}{k}")
-        CA(f"F{rr}", f"={dep_off}" if f == "t" else f"=«D»-{dep_off}", "0.0", name=f"dep{f}{k}")
+        normal = dep_off if f == "t" else f"«D»-{dep_off}"
+        central = {("t", "m"): "«D»/2", ("t", "x"): f'«D»/2-{db("«tmb»")}/2-{db("«txb»")}/2',
+                   ("b", "m"): "«D»/2", ("b", "x"): f'«D»/2+{db("«tmb»")}/2+{db("«bxb»")}/2'}[(f, k)]
+        CA(f"F{rr}", f"=IF(«CEN»,{central},{normal})", "0.0", name=f"dep{f}{k}")
         barref = f"«{f}mb»" if k == "m" else f"«{f}xb»"
         CA(f"G{rr}", f'=IF(E{rr}=0,"",{barv(barref, 4)})', "0", name=f"fsy{f}{k}")
         CA(f"H{rr}", f'=IF(E{rr}=0,"",{barv(barref, 2)})', "0.0", name=f"db{f}{k}")
@@ -396,7 +406,7 @@ def build_tab(name, d):
     nm("epsL_s", f"E{U0+15}"); nm("epsL_h", f"F{U0+15}")
     r = U1 + 1
     sym(r, "class"); desc(r, "tension face (any L bar → L)")
-    CA(f"E{r}", '=IF(OR(«clbm»="L",«clbx»="L"),"L","N")', name="cls_s"); CA(f"F{r}", '=IF(OR(«cltm»="L",«cltx»="L"),"L","N")', name="cls_h")
+    CA(f"E{r}", '=IF(OR(«FIsm»="L",«FIsx»="L"),"L","N")', name="cls_s"); CA(f"F{r}", '=IF(OR(«FIhm»="L",«FIhx»="L"),"L","N")', name="cls_h")
     r += 1; sym(r, "φ"); desc(r, '=IF(«LO»,"Class N formula, Class L As × kL","Tbl 2.2.2 (Class L: 0.65)")')
     for col, s in (("E", "s"), ("F", "h")):
         CA(f"{col}{r}", f'=IF(«LO»,«phiE_{s}»,IF(«cls_{s}»="L",0.65,MIN(0.85,MAX(0.65,1.24-13*«kuo_{s}»/12))))', "0.000", name=f"phi_{s}")
@@ -411,23 +421,56 @@ def build_tab(name, d):
     ULT_END = r
     pend.append((f"B{ULT_END + 1}", '=IF(«LO»,"L steel only: Class L areas × kL = 0.65/φ, φ from the Class N formula on that section, iterated until φ and kL agree. Engineering judgement, not a Table 2.2.2 provision.","Whole section: φ = 0.65 if any tension-face bar is Class L (Table 2.2.2).")')); ws[f"B{ULT_END + 1}"].font = font(7, i=True, color=GREY)
 
+    # Tension reinforcement for each direction: normally the bottom face (sagging) / top face (hogging).
+    # A face with no steel uses the other face's layers (single layer at cover); a central mat serves both directions,
+    # with the extras below it (sagging) or above it (hogging).
+    r = ULT_END + 2; heading(ws, r, "Tension Reinforcement by Direction")
+    r += 1; note(ws, r, "Used for φ class, minimum strength and crack control. A face with no steel takes the other face's layers; a central mat serves both directions.")
+    r += 1
+    table_header(ws, r, [(f"B{r}:C{r}", "Direction"), (f"D{r}", "Source"), (f"E{r}", "As (mm²)"), (f"F{r}", "depth (mm)"),
+                         (f"G{r}", "fsy (MPa)"), (f"H{r}", "db (mm)"), (f"I{r}", "Class"), (f"J{r}:K{r}", "bars in b")])
+    useO = {"s": "AND(NOT(«CEN»),$E$71+$E$72=0)", "h": "AND(NOT(«CEN»),$E$69+$E$70=0)"}
+    rows_ = {"s": (71, 72, 69, 70, "b", "t"), "h": (69, 70, 71, 72, "t", "b")}
+    for d_, lab_ in (("s", "Sagging"), ("h", "Hogging")):
+        om, ox, pm, px, fo, fp = rows_[d_]
+        for k, rr_own, rr_oth, rr_cen in (("m", om, pm, 69), ("x", ox, px, ox)):
+            r += 1; ws.merge_cells(f"B{r}:C{r}"); lab(f"B{r}", f"{lab_} – {'main' if k == 'm' else 'extra'}", sz=8)
+            own_t = {"s": "bottom", "h": "top"}[d_]; oth_t = {"s": "top", "h": "bottom"}[d_]
+            kind = "main" if k == "m" else "extras"
+            cen_t = "central mat" if k == "m" else ("extras below mat" if d_ == "s" else "extras above mat")
+            pend.append((f"D{r}", f'=IF(«CEN»,"{cen_t}",IF({useO[d_]},"{oth_t} {kind} (no {own_t} steel)","{own_t} {kind}"))'))
+            ws[f"D{r}"].font = font(8, color=GREY)
+            for col, nf in (("E", "0"), ("F", "0.0"), ("G", "0"), ("H", "0.0"), ("I", None), ("J", "0.0")):
+                ref = f"{col}{r}:K{r}" if col == "J" else f"{col}{r}"
+                CA(ref, f'=IF(«CEN»,{col}{rr_cen},IF({useO[d_]},{col}{rr_oth},{col}{rr_own}))', nf, name=f"F{col}{d_}{k}")
+            if k == "x":   # does this extra row sit in layer 1 (counts for spacing)?
+                xp_own, xp_oth = f"«{fo}xp»", f"«{fp}xp»"
+                nm(f"L1_{d_}", f"L{r}")
+                ws[f"L{r}"].value = f'=OR(«CEN»,IF({useO[d_]},{xp_oth},{xp_own})="Layer 1")'
+                ws[f"L{r}"].font = font(7, color=GREY); pend.append((f"L{r}", ws[f"L{r}"].value))
+                cov_own, cov_oth = f"«{fo}cov»", f"«{fp}cov»"
+                nm(f"cov_{d_}", f"M{r}")
+                pend.append((f"M{r}", f'=IF({useO[d_]},{cov_oth},{cov_own})')); ws[f"M{r}"].font = font(7, color=GREY)
+    TEN_END = r
+
     # Minimum strength
-    r = ULT_END + 2; heading(ws, r, "Minimum Strength (Cl 8.1.6.1 / 9.1.1)")
+    r = TEN_END + 2; heading(ws, r, "Minimum Strength (Cl 8.1.6.1 / 9.1.1)")
     r += 1; note(ws, r, "(Muo)min = 1.2 Z f'ct.f (no prestress, N = 0). Deemed to comply if Ast ≥ αb (D/d)² f'ct.f / fsy · b d.")
     table_header(ws, r + 1, [("E%d" % (r + 1), "Sagging +"), ("F%d" % (r + 1), "Hogging −")])
     r += 2; sym(r, "Z"); desc(r, "b D² / 6, uncracked gross"); CA(f"E{r}", "=«b»*«D»^2/6/1E6", "0.00", name="Z"); CA(f"F{r}", "=«Z»", "0.00"); U(f"G{r}", "×10⁶ mm³")
     r += 1; sym(r, "(Muo)min"); desc(r, "1.2 Z f'ct.f"); CA(f"E{r}", "=1.2*«Z»*«fctf»", "0.0", name="Mmin"); CA(f"F{r}", "=«Mmin»", "0.0"); U(f"G{r}", "kNm")
-    r += 1; sym(r, "Ast"); desc(r, "tension face, total"); CA(f"E{r}", "=«Ast_bot»", "0", name="Ast_s"); CA(f"F{r}", "=«Ast_top»", "0", name="Ast_h"); U(f"G{r}", "mm²")
-    r += 1; sym(r, "d"); desc(r, "tension face, from compr. face")
-    CA(f"E{r}", "=IF(«Ast_s»=0,0,(«Asbm»*«depbm»+«Asbx»*«depbx»)/«Ast_s»)", "0.0", name="d_s")
-    CA(f"F{r}", "=IF(«Ast_h»=0,0,«D»-(«Astm»*«deptm»+«Astx»*«deptx»)/«Ast_h»)", "0.0", name="d_h"); U(f"G{r}", "mm")
-    r += 1; sym(r, "fsy"); desc(r, "tension face (lowest)")
-    CA(f"E{r}", "=MIN(«fsybm»,IF(«Asbx»>0,«fsybx»,«fsybm»))", "0", name="fsy_s"); CA(f"F{r}", "=MIN(«fsytm»,IF(«Astx»>0,«fsytx»,«fsytm»))", "0", name="fsy_h"); U(f"G{r}", "MPa")
+    r += 1; sym(r, "Ast"); desc(r, "tension steel, total"); CA(f"E{r}", "=«FEsm»+«FEsx»", "0", name="Ast_s"); CA(f"F{r}", "=«FEhm»+«FEhx»", "0", name="Ast_h"); U(f"G{r}", "mm²")
+    r += 1; sym(r, "d"); desc(r, "tension steel, from compr. face")
+    CA(f"E{r}", "=IF(«Ast_s»=0,0,(«FEsm»*«FFsm»+«FEsx»*N(«FFsx»))/«Ast_s»)", "0.0", name="d_s")
+    CA(f"F{r}", "=IF(«Ast_h»=0,0,«D»-(«FEhm»*«FFhm»+«FEhx»*N(«FFhx»))/«Ast_h»)", "0.0", name="d_h"); U(f"G{r}", "mm")
+    r += 1; sym(r, "fsy"); desc(r, "tension steel (lowest)")
+    CA(f"E{r}", '=MIN(IF(«FEsm»>0,«FGsm»,9999),IF(«FEsx»>0,«FGsx»,9999))', "0", name="fsy_s"); CA(f"F{r}", '=MIN(IF(«FEhm»>0,«FGhm»,9999),IF(«FEhx»>0,«FGhx»,9999))', "0", name="fsy_h"); U(f"G{r}", "MPa")
     r += 1; sym(r, "αb"); desc(r, '=IF(«type»="Beam","rectangular beam 0.20","slab on "&LOWER(«support»))')
     CA(f"E{r}", '=IF(«type»="Beam",0.2,IF(«support»="Columns",0.24,0.19))', "0.00", name="alb"); CA(f"F{r}", "=«alb»", "0.00")
     r += 1; sym(r, "Ast.min"); desc(r, "αb (D/d)² f'ct.f / fsy · b d")
-    CA(f"E{r}", "=IF(«d_s»=0,0,«alb»*(«D»/«d_s»)^2*«fctf»/«fsy_s»*«b»*«d_s»)", "0", name="Amin_s")
-    CA(f"F{r}", "=IF(«d_h»=0,0,«alb»*(«D»/«d_h»)^2*«fctf»/«fsy_h»*«b»*«d_h»)", "0", name="Amin_h"); U(f"G{r}", "mm²")
+    # deemed-to-comply only where the tension steel is on the tension face (or a central mat), not borrowed from the other face
+    CA(f"E{r}", f'=IF(OR(«d_s»=0,{useO["s"]}),"",«alb»*(«D»/«d_s»)^2*«fctf»/«fsy_s»*«b»*«d_s»)', "0", name="Amin_s")
+    CA(f"F{r}", f'=IF(OR(«d_h»=0,{useO["h"]}),"",«alb»*(«D»/«d_h»)^2*«fctf»/«fsy_h»*«b»*«d_h»)', "0", name="Amin_h"); U(f"G{r}", "mm²")
     MIN_END = r
 
     # Cracked section
@@ -458,14 +501,14 @@ def build_tab(name, d):
     pend.append((f"B{r}", ws[f"B{r}"].value)); ws[f"B{r}"].value = None
     r += 1; note(ws, r, "Spacing ignores bars smaller than half the largest diameter on the face (Cl 9.5.2.1(b)). Tables on the Crack Control tab; linear interpolation, end rows beyond the table.")
     table_header(ws, r + 1, [(f"E{r+1}", "Sagging +"), (f"F{r+1}", "Hogging −")])
-    r += 2; sym(r, "db"); desc(r, "largest bar, tension face")
-    CA(f"E{r}", "=MAX(N(«dbbm»),N(«dbbx»))", "0.0", name="dbx_s"); CA(f"F{r}", "=MAX(N(«dbtm»),N(«dbtx»))", "0.0", name="dbx_h"); U(f"G{r}", "mm")
-    r += 1; sym(r, "s"); desc(r, '=IF(«type»="Slab","b / (bars in layer 1 of the face)","clear width / (n − 1), layer 1")')
+    r += 2; sym(r, "db"); desc(r, "largest tension bar")
+    CA(f"E{r}", "=MAX(N(«FHsm»),N(«FHsx»))", "0.0", name="dbx_s"); CA(f"F{r}", "=MAX(N(«FHhm»),N(«FHhx»))", "0.0", name="dbx_h"); U(f"G{r}", "mm")
+    r += 1; sym(r, "s"); desc(r, '=IF(«type»="Slab","b / (tension bars in layer 1)","clear width / (n − 1), layer 1")')
     def spacing(f, s_):
-        cnt_m = f'IF(N(«db{f}m»)>=0.5*«dbx_{s_}»,«n{f}m»,0)'
-        cnt_x = f'IF(OR(«{f}xp»="Layer 2",N(«db{f}x»)<0.5*«dbx_{s_}»),0,«n{f}x»)'
+        cnt_m = f'IF(N(«FH{s_}m»)>=0.5*«dbx_{s_}»,N(«FJ{s_}m»),0)'
+        cnt_x = f'IF(OR(NOT(«L1_{s_}»),N(«FH{s_}x»)<0.5*«dbx_{s_}»),0,N(«FJ{s_}x»))'
         n1 = f'({cnt_m}+{cnt_x})'
-        return (f'=IF({n1}<=0,0,IF(«type»="Slab",«b»/{n1},IF({n1}<=1,0,(«b»-2*(«{f}cov»+{barv("«lig»", 2)})-«dbx_{s_}»)/({n1}-1))))')
+        return (f'=IF({n1}<=0,0,IF(«type»="Slab",«b»/{n1},IF({n1}<=1,0,(«b»-2*(«cov_{s_}»+{barv("«lig»", 2)})-«dbx_{s_}»)/({n1}-1))))')
     CA(f"E{r}", spacing("b", "s"), "0", name="sp_s"); CA(f"F{r}", spacing("t", "h"), "0", name="sp_h"); U(f"G{r}", "mm")
     def interp(xs, tbl, col, x):
         xc = f"MIN(MAX({x},INDEX({xs},1)),INDEX({xs},ROWS({xs})))"
@@ -524,7 +567,8 @@ def build_tab(name, d):
     ws.conditional_formatting.add("I10:K10", FormulaRule(formula=['$I$10="UPDATE ADD-IN"'], fill=PatternFill(bgColor="C55A11"), font=Font(color="FFFFFF", bold=True)))
     ws.conditional_formatting.add("B7", FormulaRule(formula=['OR($V$7,$V$4="")'], font=Font(color=RED, bold=True, italic=False)))
     def face(f): return (f'IF(«type»="Slab",«{f}mb»&"@"&«{f}mn»,«{f}mn»&«{f}mb»)&IF(N(«{f}xn»)>0," + "&«{f}xn»&«{f}xb»,"")')
-    pend.append(("B11", f'="Top "&{face("t")}&"  ·  bottom "&{face("b")}&"  ·  "&«model»&IF(«LO»,"  ·  Class L: L steel only","")'))
+    cen_sum = ('"Central "&IF(«type»="Slab",«tmb»&"@"&«tmn»,«tmn»&«tmb»)&IF(N(«Astx»)>0," + "&«txn»&«txb»&" above","")&IF(N(«Asbx»)>0," + "&«bxn»&«bxb»&" below","")')
+    pend.append(("B11", f'=IF(«CEN»,{cen_sum},"Top "&IF(N(«Astm»)+N(«Astx»)=0,"none",{face("t")})&"  ·  bottom "&IF(N(«Asbm»)+N(«Asbx»)=0,"none",{face("b")}))&"  ·  "&«model»&IF(«LO»,"  ·  Class L: L steel only","")'))
     ws["B11"].font = font(7, color=GREY)
     c = ws["F11"]
     c.value = (f'=IFERROR(IF(LEFT(E{U0},4)="#OAR",E{U0},IF(LEFT(F{U0},4)="#OAR",F{U0},IF(LEFT(E{C1},4)="#OAR",E{C1},IF(LEFT(F{C1},4)="#OAR",F{C1},'
@@ -545,8 +589,8 @@ def build_tab(name, d):
     for rr, s in ((17, "s"), (18, "h")):
         face = "bottom" if s == "s" else "top"
         chk(rr, f"Muo{'+' if s == 's' else '−'} ≥ (Muo)min", f"1.2Mcr, or Ast ≥ Ast.min ({face})", "=«Mmin»", f"=«Muo_{s}»", "kNm",
-            f'=IF(«Ast_{s}»=0,"",MIN(«Mmin»/«Muo_{s}»,IF(«Ast_{s}»>0,«Amin_{s}»/«Ast_{s}»,9)))',
-            status=f'=IF(I{rr}="","–",IF(«Mmin»/«Muo_{s}»<=1,"OK",IF(I{rr}<=1,"OK*","NG")))', ratio=f'=IF(«Ast_{s}»=0,"",«Ast_{s}»/«Amin_{s}»)')
+            f'=IF(«Ast_{s}»=0,"",MIN(«Mmin»/«Muo_{s}»,IF(N(«Amin_{s}»)>0,«Amin_{s}»/«Ast_{s}»,9)))',
+            status=f'=IF(I{rr}="","–",IF(«Mmin»/«Muo_{s}»<=1,"OK",IF(I{rr}<=1,"OK*","NG")))', ratio=f'=IF(OR(«Ast_{s}»=0,N(«Amin_{s}»)=0),"",«Ast_{s}»/«Amin_{s}»)')
     chk(19, "εsL ≤ 1.5 %", '=IF(«LO»,"Class L strain at ULS (L steel only)","Class L strain at ULS (info)")',
         '=IF(COUNTIF($I$69:$I$72,"L")=0,"",MAX(«epsL_s»,«epsL_h»))', "=0.015", "", '=IF(OR(E19="",NOT(«LO»)),"",E19/F19)',
         status='=IF(E19="","–",IF(NOT(«LO»),"info",IF(I19<=1,"OK","NG")))', nf="0.0000")
@@ -555,9 +599,9 @@ def build_tab(name, d):
     chk(22, "σscr− (Ms*)", "hogging, top bars ≤ σs.max", "=IF(N(«hMs»)=0,\"\",«sig_h»)", "=«smax_h»", "MPa", ut(22, "N(«hMs»)=0"), nf="0")
     chk(23, "σscr.1+ (Ms1*)", "sagging ≤ 0.8 fsy", "=IF(N(«sMs1»)=0,\"\",«sig1_s»)", "=«s08_s»", "MPa", ut(23, "N(«sMs1»)=0"), nf="0")
     chk(24, "σscr.1− (Ms1*)", "hogging ≤ 0.8 fsy", "=IF(N(«hMs1»)=0,\"\",«sig1_h»)", "=«s08_h»", "MPa", ut(24, "N(«hMs1»)=0"), nf="0")
-    chk(25, "s bottom", '=IF(«type»="Slab","bar spacing ≤ min(2D, 300)","bar spacing ≤ 300 (layer 1)")', '=IF(«sp_s»=0,"",«sp_s»)', "=«spmax»", "mm",
+    chk(25, "s (sag)", '=IF(«type»="Slab","bar spacing ≤ min(2D, 300)","bar spacing ≤ 300 (layer 1)")', '=IF(«sp_s»=0,"",«sp_s»)', "=«spmax»", "mm",
         ut(25, "«sp_s»=0"), nf="0")
-    chk(26, "s top", '=IF(«type»="Slab","bar spacing ≤ min(2D, 300)","bar spacing ≤ 300 (layer 1)")', '=IF(«sp_h»=0,"",«sp_h»)', "=«spmax»", "mm",
+    chk(26, "s (hog)", '=IF(«type»="Slab","bar spacing ≤ min(2D, 300)","bar spacing ≤ 300 (layer 1)")', '=IF(«sp_h»=0,"",«sp_h»)', "=«spmax»", "mm",
         ut(26, "«sp_h»=0"), nf="0")
     chk(27, "As shrinkage", '=IF(«type»="Slab","main mats ≥ ρ b D (shrinkage & temp.)","slabs only")',
         '=IF(«type»="Slab",«Ashr»,"")', '=IF(«type»="Slab",«Asmats»,"")', "mm²", '=IF(«type»<>"Slab","",E27/F27)', nf="0")
@@ -577,12 +621,13 @@ def build_tab(name, d):
     def dvl(formula, ref):
         v = DataValidation(type="list", formula1=formula, allow_blank=True); ws.add_data_validation(v); v.add(ref)
     dvl('"Slab,Beam"', "E34"); dvl('"Rectangular,Curvilinear,Parabolic"', "E38"); dvl("=BarList", "E45:F45"); dvl("=BarList", "E48:F48")
-    dvl('"Layer 1,Layer 2"', "E49:F49"); dvl("=BarList", "E51"); dvl('"Beams or walls,Columns"', "E52"); dvl('"Minor,Moderate,Strong"', "E63"); dvl('"Whole section 0.65,L steel only"', "E53"); dvl('"0.2 mm,0.3 mm,0.4 mm,Legacy"', "E65")
+    dvl('"Layer 1,Layer 2"', "E49:F49"); dvl("=BarList", "E51"); dvl('"Beams or walls,Columns"', "E52"); dvl('"Minor,Moderate,Strong"', "E63"); dvl('"Whole section 0.65,L steel only"', "E53"); dvl('"0.2 mm,0.3 mm,0.4 mm,Legacy"', "E65"); dvl('"Top & bottom,Single central mat"', "E41")
     rules = [("E51", '«type»<>"Beam"', "B51"),
              ("E52:F52", '«type»<>"Slab"', "B52"),
              ("E63:F64", '«type»<>"Slab"', "B63:B64"),
              ("E50", '«txp»<>"Layer 2"', "E50"), ("F50", '«bxp»<>"Layer 2"', "F50"),
-             ("E47:E50", "N(«txn»)=0", "E47"), ("F47:F50", "N(«bxn»)=0", "F47")]
+             ("E47:E50", "N(«txn»)=0", "E47"), ("F47:F50", "N(«bxn»)=0", "F47"),
+             ("E44:F44", "«CEN»", "B44"), ("F45:F46", "«CEN»", "F45"), ("E49:F50", "«CEN»", "B49:B50")]
     for ref, cond, labref in rules:
         f = Fx(cond)
         ws.conditional_formatting.add(ref, FormulaRule(formula=[f], fill=PatternFill(bgColor=NA_FILL), font=Font(color=NA_FONT)))
@@ -606,10 +651,15 @@ b1 = dict(loc="Helensvale – wide beam 3", type="Beam", b=1200, D=600, fc=40, m
           top=dict(cov=50, mb="N24", mn=7, xn=4, xb="N24", xp="Layer 2", gap=25),
           bot=dict(cov=50, mb="N24", mn=6, xn=0, xb="N20", xp="Layer 1", gap=25),
           sag=dict(Mu=180, Ms=100, Ms1=170), hog=dict(Mu=943.8, Ms=726, Ms1=726))
-EXAMPLES = (("S1", s1), ("B1", b1))
+# S2: pool floor / slab on ground with one central mat (SL92 = L9 @ 200) and N12 extras under the mat
+s2 = dict(loc="Pool floor – single central mat", type="Slab", b=1000, D=150, fc=32, model="Rectangular", layout="Single central mat",
+          top=dict(cov=50, mb="L9", mn=200, xn=0, xb="N12", xp="Layer 1", gap=25),
+          bot=dict(cov=50, mb="None", mn=200, xn=5, xb="N12", xp="Layer 1", gap=25),
+          sag=dict(Mu=6.5, Ms=4.0, Ms1=4.5), hog=dict(Mu=3.0, Ms=1.8, Ms1=2.0), control="Minor", restraint=0.75)
+EXAMPLES = (("S1", s1), ("B1", b1), ("S2", s2))
 if __name__ == "__main__":
     for nm_, dd in EXAMPLES: build_tab(nm_, dd)
-    wb._sheets = [wb[n] for n in ("S1", "B1", "Bars", "Crack Control")]
+    wb._sheets = [wb[n] for n in ("S1", "B1", "S2", "Bars", "Crack Control")]
     wb.active = 0
     from openpyxl.workbook.properties import CalcProperties
     wb.calculation = CalcProperties(fullCalcOnLoad=True)
