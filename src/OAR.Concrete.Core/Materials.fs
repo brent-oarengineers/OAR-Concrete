@@ -50,7 +50,8 @@ type ConcreteModel =
     /// Curvilinear curve of Cl 3.1.4 (commentary form, as Brent's Circular_Pile_AS3600.py):
     /// σ = σcp n η / (n − 1 + η^(nk)), σcp = 0.9 f'c, η = ε/εcp
     | Curvilinear
-    /// Parabola–rectangle: σ = 0.9 f'c [2η − η²] up to ε0 = 0.002, then 0.9 f'c to εcu
+    /// Parabola–rectangle (Hognestad form, as RAM Concept): σ = 0.9 f'c [2η − η²], η = ε/ε0, up to
+    /// ε0 = 2 × 0.9 f'c / Ec (initial slope = Ec), then 0.9 f'c to εcu
     | Parabolic
 
 let parseModel (text: string) =
@@ -82,8 +83,8 @@ let curvilinearParameters (c: Concrete) =
     let k = max (0.67 + scp / 62.0) 1.0
     scp, ecp, n, k
 
-[<Literal>]
-let private ParabolaEps0 = 0.002
+/// Strain at the peak of the parabolic law: ε0 = 2 σcp / Ec, σcp = 0.9 f'c (initial tangent = Ec)
+let parabolaEps0 (c: Concrete) = 2.0 * 0.9 * c.Fc / c.Ec
 
 /// Concrete stress for a strain (compression +). Tension carries no stress.
 let stress (c: Concrete) (eps: float) =
@@ -95,8 +96,9 @@ let stress (c: Concrete) (eps: float) =
             if eps >= EpsCu * (1.0 - gamma c.Fc) * (1.0 - 1e-9) then alpha2 c.Fc * c.Fc else 0.0
         | Parabolic ->
             let fm = 0.9 * c.Fc
-            if eps < ParabolaEps0 then
-                let r = eps / ParabolaEps0
+            let e0 = parabolaEps0 c
+            if eps < e0 then
+                let r = eps / e0
                 fm * (2.0 * r - r * r)
             else fm
         | Curvilinear ->
@@ -109,7 +111,7 @@ let stress (c: Concrete) (eps: float) =
 let breakStrains (c: Concrete) =
     match c.Model with
     | Rectangular -> [ EpsCu * (1.0 - gamma c.Fc) ]
-    | Parabolic -> [ ParabolaEps0 ]
+    | Parabolic -> [ parabolaEps0 c ]
     | Curvilinear ->
         let _, ecp, _, _ = curvilinearParameters c
         [ ecp ]
