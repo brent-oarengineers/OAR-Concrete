@@ -93,7 +93,7 @@ the add-in and restart Excel") and the status box shows **UPDATE ADD-IN** on scr
   column and under it in the Bottom column; pool shells, slabs on ground). The *Tension Reinforcement by Direction*
   table shows which bars are used for φ, minimum strength and crack control in each direction.
 - Each face: main bars plus extras (number within b, bar, layer 1 alongside or layer 2 inside with a clear gap).
-  Mesh wires L6–L12 are on the Bars tab (Class L; SL92 = L9 @ 200).
+  Class S bars S10–S32 (fsy 250 MPa) and mesh wires L6–L12 are on the Bars tab (Class L; SL92 = L9 @ 200).
 - ULS both directions with the selected stress block; the other block (rectangular ↔ curvilinear) is shown as an
   info row for comparison.
 - φ from kuo, Class N formula. Class L (dropdown *Class L reinforcement, φ*): **Whole section 0.65** (default, Table

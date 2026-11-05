@@ -3,6 +3,9 @@
 Each version that reaches `main` is built, tested and published automatically as a GitHub Release.
 The calc sheet shows the version it was calculated with (under the green title bar).
 
+## v0.3.1
+- Class S reinforcement: S10–S32 (fsy 250 MPa, deformed, ductility Class N, same areas as N bars) on the Bars tab.
+
 ## v0.3.0
 - **Single layer of reinforcement**: bar "None" for a face with no mat (e.g. slab on ground with one mat at cover).
   A direction whose tension face has no steel uses the other face's layers for φ class, minimum strength and crack
