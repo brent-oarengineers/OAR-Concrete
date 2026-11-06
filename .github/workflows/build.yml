@@ -79,4 +79,4 @@ jobs:
           $tag = "v$env:VERSION"
           gh release view $tag 2>$null
           if ($LASTEXITCODE -eq 0) { Write-Host "$tag already released - nothing to do"; exit 0 }
-          gh release create $tag "dist/OAR-Concrete-v$env:VERSION.zip" --title "OAR Concrete $tag" --notes-file dist/RELEASE_NOTES.md --target $env:GITHUB_SHA
+          gh release create $tag "dist/OAR-Concrete-v$env:VERSION.zip" "dist/OAR - RC Flexural Design.xlsx" "dist/OAR - RC Column Design.xlsx" --title "OAR Concrete $tag" --notes-file dist/RELEASE_NOTES.md --target $env:GITHUB_SHA
