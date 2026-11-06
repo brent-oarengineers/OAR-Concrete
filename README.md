@@ -15,7 +15,7 @@ biaxial bending): see *Groundwork for the column sheet* below.
 | `src/OAR.Concrete.Excel` | Excel-DNA add-in (net48): converts sheet ranges to the engine and back. One .xll per bitness. |
 | `tests/OAR.Concrete.Tests` | Benchmark tests (plain console runner): closed-form cases, `tools/reference_check.py`, Brent's pile script. |
 | `tools/` | `reference_check.py` – independent scipy re-implementation used to produce benchmark values; `Circular_Pile_AS3600.py` – Brent's original pile script (curvilinear benchmark). |
-| `template/` | `OAR - RC Flexural Design.xlsx` and the script that builds it (`python template/build_template.py`). |
+| `template/` | `OAR - RC Flexural Design.xlsx` and `OAR - RC Column Design.xlsx`, with the scripts that build them (`build_template.py`, `build_column_template.py`, shared style in `oar_style.py`). |
 | `deploy/` | `Install-OARConcrete.cmd/.ps1` – per-user install / update at login. |
 
 ## How the engine works (in plain terms)
@@ -144,18 +144,37 @@ Key values (engine = `tools/reference_check.py` to 4 figures): S1 Muo 32.73 / 56
 
 - **Crack widths by calculation** (Cl 8.6.2.3) are not built in; the tables (Cl 8.6.2.2 / 9.5.2.1) are.
 - **Shrinkage steel** uses the previous sheet's interpolation on b D (the old sheet used b d).
-- **Squash load**: RAM Concept uses gross Ac (Nuo = α1 f'c Ag + fsy As); the engine deducts the bar area. Decide
-  before the column sheet.
-- **φ for compression members** (MNCURVE default φ0 = 0.65): confirm against Table 2.2.2 before the column sheet.
+- **Squash load**: RAM Concept uses gross Ac (Nuo = α1 f'c Ag + fsy As); the engine deducts the bar area. The column sheet
+  uses the net area (slightly conservative, about 1 % on Nuo at 2 % steel).
+- **φ0 for compression members**: Amdt 2 gives φ0 = 0.65 kφ; the column sheet takes φ0 as an input (default 0.60).
+  Confirm the kφ value you want as the office default.
 - Not covered: shear, torsion, deflection, detailing.
 
-## Groundwork for the column sheet
+## The column calc tab (OAR - RC Column Design.xlsx)
 
-Already in the engine and tested: any bending direction θ (biaxial: run θ and read Mx, My), any axial force
-(`Ultimate.analyse … N`), circular sections (exact) and polygons (any outline, voids for hollow sections),
-individual bars at x, y, the squash load, Nub and φ interpolation, and `Interaction.curve`. Still to do for that
-sheet: the bar-layout builder for rectangular columns (bars per face), solving θ so the capacity vector lines up
-with (Mx*, My*), slenderness moment magnification (Cl 10.4/10.5), and the M–N chart.
+Tabs C1 (rectangular example, Brent's previous RC_Column sheet) and C2 (Ø600 pile, 6N20) plus a Bars data tab.
+
+- **Inputs**: shape (rectangular / circular), size, f'c, stress block, φ0, biaxial method, cover, ligature, typical
+  bar and bars per face (or number of bars for a circle), Lu, k per axis, βd, and up to six load cases
+  (N*, Mx and My at top and bottom).
+- **Bars**: the typical layout comes from `OAR.CONCRETE.BARLAYOUT` (perimeter bars, corners included). Ten custom
+  rows in the Bar Schedule take any bar at any x, y (from the section centre); set the typical bar to "None" for a
+  fully custom layout.
+- **Slenderness (braced only)**: Cl 10.3 short-column limit, Nc from Cl 10.4.4 with βd = 0 when Le/r ≤ 40 and
+  N* ≤ M2/(2D), km and δb ≥ 1 per axis, minimum eccentricity 0.05D about each axis.
+- **Capacity**: `OAR.CONCRETE.COLUMN` finds the neutral-axis direction θ for which the capacity vector (Mux, Muy)
+  points along the design moment (M*x, M*y) at N*, by strain compatibility. φ from Table 2.2.2 (φ0 + (φb − φ0)(1 − N/Nub)
+  above zero). Above the point where dn = D/γ the capacity runs in a straight line to Nuo.
+- **Cl 10.6.4** interaction (αn = 0.7 + 1.7 N*/(0.6Nuo), 1 ≤ αn ≤ 2) is shown for every case; for rectangular sections the
+  *Biaxial check governing* input picks it or strain compatibility for the check. Circular sections always use strain
+  compatibility (any direction is a principal axis).
+- **Charts**: M–N for each axis (φ and unfactored) with the design actions, the moment contour at N* of a chosen case,
+  and the section with its bars.
+
+New add-in functions: `BARLAYOUT`, `COLUMN`, `COLUMNAXIS`, `MNCOLUMN`, `MCONTOUR`. Checked against a 2 mm fibre-grid
+reference (uniaxial and biaxial, within 0.3 %) and Brent's pile calculator (Ø600 6N20: Mu 222.3 vs 221.7 kNm).
+
+Not covered: unbraced (sway) columns, ligature spacing / confinement, detailing.
 
 ## Building and testing
 

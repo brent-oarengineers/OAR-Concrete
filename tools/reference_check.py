@@ -145,3 +145,59 @@ if __name__ == "__main__":
         print(f"S1 L steel only {'sag' if sag else 'hog'}: phi {r['phi']:.5f}  k {r['k']:.5f}  Muo {r['Mu']:.4f}  phiMuo {r['phiMu']:.4f}")
     p = pile_brent()
     if p: print(f"Brent's pile (curvilinear): Mu {p['Mu']:.4f}  kuo {p['kuo']:.5f}  dn {p['dn']:.4f}")
+
+
+# ---------------------------------------------------------------------------------------------
+# Columns: brute-force fibre grid (independent of the engine's strip/polygon method)
+# ---------------------------------------------------------------------------------------------
+def column_fibre(b, D, bars, fc, N_kN, theta_deg, cell=2.0):
+    """Rectangular block, rectangle b x D centred at 0, bars [(x, y, As, fsy)] from centre, compression +.
+    Returns (dn, Mx, My) in mm, kNm at axial force N (kN) for max compression direction theta."""
+    import numpy as np
+    xs = np.arange(-b / 2 + cell / 2, b / 2, cell); ys = np.arange(-D / 2 + cell / 2, D / 2, cell)
+    X, Y = np.meshgrid(xs, ys); X = X.ravel(); Y = Y.ravel(); A = cell * cell
+    t = math.radians(theta_deg); ux, uy = math.cos(t), math.sin(t)
+    S = X * ux + Y * uy
+    corners = [(sx * b / 2, sy * D / 2) for sx in (-1, 1) for sy in (-1, 1)]
+    stop = max(cx * ux + cy * uy for cx, cy in corners)
+    a2, g = alpha2(fc), gamma(fc)
+    def forces(dn):
+        sna = stop - dn
+        eps = ECU * (S - sna) / dn
+        sig = np.where(eps >= ECU * (1 - g), a2 * fc, 0.0)
+        n = (sig * A).sum(); mx = (sig * A * Y).sum(); my = (sig * A * X).sum()
+        for x, y, As, fy in bars:
+            e = ECU * ((x * ux + y * uy) - sna) / dn
+            s = max(-fy, min(fy, ES * e)) - (a2 * fc if e >= ECU * (1 - g) else 0.0)
+            n += s * As; mx += s * As * y; my += s * As * x
+        return n, mx, my
+    dn = optimize.brentq(lambda d: forces(d)[0] - N_kN * 1e3, 1e-3, 50 * max(b, D), xtol=1e-9)
+    n, mx, my = forces(dn)
+    return dn, mx / 1e6, my / 1e6
+
+
+def column_biaxial_fibre(b, D, bars, fc, N_kN, mx_load, my_load):
+    target = math.atan2(my_load, mx_load)
+    def g(th):
+        _, mx, my = column_fibre(b, D, bars, fc, N_kN, th)
+        d = math.atan2(my, mx) - target
+        return (d + math.pi) % (2 * math.pi) - math.pi
+    t0 = 90 - math.degrees(target)          # psi = atan2(My, Mx) is about 90 - theta
+    grid = [t0 - 89 + 2 * i for i in range(90)]
+    vals = [g(t) for t in grid]
+    k = next(i for i in range(len(grid) - 1) if vals[i] * vals[i + 1] <= 0 and abs(vals[i]) < 1.5 and abs(vals[i + 1]) < 1.5)
+    th = optimize.brentq(g, grid[k], grid[k + 1], xtol=1e-7)
+    dn, mx, my = column_fibre(b, D, bars, fc, N_kN, th)
+    return th, mx, my
+
+
+if __name__ == "__main__":
+    # Brent's old column sheet section: 300 x 600, f'c 40, 2N24 top + 2N24 bottom + 1N24 each side,
+    # cover 50 + R10 lig -> edge 72 (bars x = ±78, y = ±228; sides at y = 0)
+    bars = [(-78, 228, 450, 500), (78, 228, 450, 500), (-78, -228, 450, 500), (78, -228, 450, 500),
+            (-78, 0, 450, 500), (78, 0, 450, 500)]
+    for th in (90, 0):
+        dn, mx, my = column_fibre(300, 600, bars, 40, 1993.6, th)
+        print(f"Column 300x600 N 1993.6 theta {th}: dn {dn:.3f}  Mx {mx:.3f}  My {my:.3f}")
+    th, mx, my = column_biaxial_fibre(300, 600, bars, 40, 1993.6, 200.0, 80.0)
+    print(f"Column biaxial (200, 80) at N 1993.6: theta {th:.4f}  Mx {mx:.3f}  My {my:.3f}  |M| {math.hypot(mx, my):.3f}")

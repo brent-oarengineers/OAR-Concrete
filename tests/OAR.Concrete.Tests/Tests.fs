@@ -197,6 +197,52 @@ let main argv =
     // squash load: RAM uses gross Ac (0.85 × 32 × 250 000 + 500 × 1333.3 = 7467 kN); engine deducts the bars
     check "RAM s21  Nuo with gross Ac (7467)" 7467.0 ((alpha1 32.0 * 32.0 * 250000.0 + 500.0 * 1333.3) / 1000.0) 1e-4
 
+    // ---------------- Columns (tools/reference_check.py column_fibre: brute-force 2 mm fibre grid) ----------------
+    // Brent's old column sheet section: 300 x 600, f'c 40, 2N24 top + 2N24 bottom + 1N24 each side, edge 72
+    let lay = Column.rectLayout 300.0 600.0 72.0 2 3
+    check "Layout rect 2 x 3  number of bars" 6.0 (float lay.Length) 1e-12
+    check "Layout rect  first bar x = -78" -78.0 (fst lay.[0]) 1e-9
+    check "Layout rect  first bar y = 228" 228.0 (snd lay.[0]) 1e-9
+    check "Layout rect  side bar y = 0" 0.0 (snd lay.[2]) 1e-9
+    let cl = Column.circLayout 600.0 72.0 6
+    check "Layout circ 6  first bar at top y = 228" 228.0 (snd cl.[0]) 1e-9
+    check "Layout circ 6  second bar x = 228 sin 60" (228.0 * sin (Math.PI / 3.0)) (fst cl.[1]) 1e-9
+    let colBars = lay |> List.map (fun (x, y) -> Section.barAt 450.0 (300.0 - y) 500.0 (150.0 + x) EsDefault)
+    let col = Section.rectangle 300.0 600.0 colBars
+    let c40 = rc 40.0 Rectangular
+    let duct = Design.ClassN
+    let r = Column.atTheta col c40 90.0 1993.6 0.6 duct
+    check "Column x  Mx at N 1993.6 (fibre 587.311)" 587.311 r.Mx 3e-3
+    check "Column x  dn (fibre 261.087)" 261.087 r.Dn 3e-3
+    check "Column x  My = 0" 0.0 r.My 1e-6
+    let r = Column.atTheta col c40 0.0 1993.6 0.6 duct
+    check "Column y  My at N 1993.6 (fibre 273.554)" 273.554 r.My 3e-3
+    // the same section turned 90° (600 wide x 300 deep, bars mapped) bent about its own x axis
+    let colT = Section.rectangle 600.0 300.0 (lay |> List.map (fun (x, y) -> Section.barAt 450.0 (150.0 - x) 500.0 (300.0 + y) EsDefault))
+    check "Column y  My = Mx of the section turned 90 deg" (Ultimate.analyse colT c40 90.0 1993.6).Mu r.My 1e-6
+    let r = Column.biaxial col c40 1993.6 200.0 80.0 0.6 duct
+    check "Biaxial (200, 80)  theta (fibre 29.4275 deg)" 29.4275 r.Theta 2e-3
+    check "Biaxial (200, 80)  Mx (fibre 383.356)" 383.356 r.Mx 3e-3
+    check "Biaxial (200, 80)  My (fibre 153.358)" 153.358 r.My 3e-3
+    check "Biaxial (200, 80)  capacity along the load direction (My/Mx = 0.4)" 0.4 (r.My / r.Mx) 1e-6
+    let ax = Column.axisProps col c40 90.0 duct
+    check "Column  phi at N = 0 is phi_b" ax.PhiB (Column.atTheta col c40 90.0 0.0 0.6 duct).Phi 1e-12
+    check "Column  phi at N = Nub is phi0" 0.6 (Column.atTheta col c40 90.0 ax.Nub 0.6 duct).Phi 1e-12
+    check "Column  M = 0 at the squash load" 0.0 (Column.atTheta col c40 90.0 ax.Nuo 0.6 duct).Mu 1e-9
+    let nLim = (Ultimate.evaluate col c40 90.0 (600.0 / gamma 40.0) Section.DefaultStrips).N / 1000.0
+    let mLim = (Ultimate.evaluate col c40 90.0 (600.0 / gamma 40.0) Section.DefaultStrips).Mu / 1e6
+    check "Column  straight line to squash: M at mid-point = Mlim / 2" (mLim / 2.0) (Column.atTheta col c40 90.0 ((nLim + ax.Nuo) / 2.0) 0.6 duct).Mu 1e-9
+    let mn = Column.mnCurve col c40 90.0 0.6 duct
+    check "M-N grid  40 points" 40.0 (float mn.Length) 1e-12
+    let n0, m0, _ = mn.Head
+    check "M-N grid  first point = pure tension" ax.Nuot n0 1e-9
+    check "M-N grid  pure tension moment = 0 (symmetric bars)" 0.0 m0 1e-6
+    let n6, m6, _ = mn.[6]
+    check "M-N grid  N = 0 point = Muo" ax.Muo m6 1e-6
+    let ct = Column.contour col c40 1993.6 36 0.6 duct
+    check "Contour  closed (first = last)" ct.Head.Mx (List.last ct).Mx 1e-9
+    check "Contour  theta 90 point = Mx capacity" 587.311 ct.Head.Mx 3e-3
+
     printfn ""
     printfn "%d checks, %d failed" count failures
     if failures = 0 then 0 else 1

@@ -10,7 +10,7 @@ open OAR.Concrete.Materials
 [<Literal>]
 let Category = "OAR Concrete"
 
-let private version = "0.3.2"
+let private version = "0.4.0"
 
 // ---------- conversion helpers (same as OAR Timber) ----------
 
@@ -208,3 +208,133 @@ let concreteMnCurve
             [ p.N; p.M; p.Dn; p.Phi; p.PhiN; p.PhiM ]
             |> List.iteri (fun j v -> out.[i, j] <- (if Double.IsNaN v then box "–" else box v)))
         box out)
+
+// ---------- columns ----------
+
+let private ductOf (classes: obj) =
+    if range classes |> Seq.cast<obj> |> Seq.exists (fun o -> (text o).ToUpperInvariant() = "L") then Design.ClassL else Design.ClassN
+
+/// "x" (or 90) = bending about the x axis, compression on the top face; "y" (or 0) = about the y axis
+let private axisOf (o: obj) =
+    match (text o).ToUpperInvariant() with
+    | "X" | "MX" -> 90.0
+    | "Y" | "MY" -> 0.0
+    | _ -> senseOf o
+
+let private colArgs shape dims bars fc model ecArg =
+    sectionOf shape dims bars, concrete (num "fc" fc) (numOpt "Ec" ecArg) (parseModel (text model))
+
+let private grid (rows: float list list) =
+    let n = rows.Length
+    let m = if n = 0 then 0 else rows.Head.Length
+    let out = Array2D.create n m (box "")
+    rows |> List.iteri (fun i r -> r |> List.iteri (fun j v -> out.[i, j] <- (if Double.IsNaN v then box "–" else box v)))
+    box out
+
+[<ExcelFunction(Name = "OAR.CONCRETE.BARLAYOUT",
+                Description = "Typical column bar layout. Spills rows x | y (mm from the section centre), padded with blanks to [rows]. Rect: n1 bars along each b face, n2 along each D face (corners counted in both). Circle: n1 bars, first at the top",
+                Category = Category, IsThreadSafe = true)>]
+let concreteBarLayout
+    ([<ExcelArgument(Name = "shape", Description = "Rect or Circle")>] shape: obj)
+    ([<ExcelArgument(Name = "dims", Description = "Rect: b, D (mm). Circle: D (mm)")>] dims: obj)
+    ([<ExcelArgument(Name = "edge", Description = "Face to bar centre: cover + ligature + db/2 (mm)")>] edgeArg: obj)
+    ([<ExcelArgument(Name = "n1", Description = "Rect: bars per b face incl. corners. Circle: number of bars")>] n1Arg: obj)
+    ([<ExcelArgument(Name = "[n2]", Description = "Rect: bars per D face incl. corners")>] n2Arg: obj)
+    ([<ExcelArgument(Name = "[rows]", Description = "Rows to fill (blank rows after the last bar), default 40")>] rowsArg: obj)
+    : obj =
+    guard (fun () ->
+        let d = range dims |> Seq.cast<obj> |> Seq.choose cellOpt |> Array.ofSeq
+        let s = (text shape).ToUpperInvariant()
+        let edge = num "edge" edgeArg
+        let n1 = int (num "n1" n1Arg)
+        let pts =
+            if s.StartsWith "CIRC" then Column.circLayout d.[0] edge n1
+            else Column.rectLayout d.[0] d.[1] edge n1 (int (num "n2" n2Arg))
+        let rows = int (defaultArg (numOpt "rows" rowsArg) 40.0)
+        if pts.Length > rows then failwithf "%d bars do not fit in the %d-row table" pts.Length rows
+        let out = Array2D.create rows 2 (box "")
+        pts |> List.iteri (fun i (x, y) -> out.[i, 0] <- box (Math.Round(x, 3)); out.[i, 1] <- box (Math.Round(y, 3)))
+        box out)
+
+[<ExcelFunction(Name = "OAR.CONCRETE.COLUMN",
+                Description = "Column capacity at N* along the direction of (M*x, M*y), strain compatibility (biaxial). Spills 9 values down: φ | Mu kNm | φMu kNm | Mux kNm | Muy kNm | θ deg | dn mm | Nub kN | Nuo kN",
+                Category = Category, IsThreadSafe = true)>]
+let concreteColumn
+    ([<ExcelArgument(Name = "shape", Description = "Rect or Circle")>] shape: obj)
+    ([<ExcelArgument(Name = "dims", Description = "Rect: b, D (mm). Circle: D (mm)")>] dims: obj)
+    ([<ExcelArgument(Name = "bars", Description = "Rows: As mm² | depth from top mm | fsy MPa | x from left mm")>] bars: obj)
+    ([<ExcelArgument(Name = "fc", Description = "f'c, MPa")>] fc: obj)
+    ([<ExcelArgument(Name = "model", Description = "Rectangular, Curvilinear or Parabolic")>] model: obj)
+    ([<ExcelArgument(Name = "N", Description = "N*, kN (compression +)")>] nArg: obj)
+    ([<ExcelArgument(Name = "Mx", Description = "M*x, kNm (about the x axis)")>] mxArg: obj)
+    ([<ExcelArgument(Name = "My", Description = "M*y, kNm (about the y axis)")>] myArg: obj)
+    ([<ExcelArgument(Name = "[phi0]", Description = "φ0 for compression (Table 2.2.2(d)), default 0.6")>] phi0Arg: obj)
+    ([<ExcelArgument(Name = "[classes]", Description = "Bar classes (any L → Class L φ)")>] classesArg: obj)
+    ([<ExcelArgument(Name = "[Ec]", Description = "Ec MPa (curvilinear / parabolic). Blank = Table 3.1.2")>] ecArg: obj)
+    : obj =
+    guard (fun () ->
+        let sec, c = colArgs shape dims bars fc model ecArg
+        let mx = defaultArg (numOpt "Mx" mxArg) 0.0
+        let my = defaultArg (numOpt "My" myArg) 0.0
+        let r = Column.biaxial sec c (num "N" nArg) mx my (defaultArg (numOpt "phi0" phi0Arg) 0.6) (ductOf classesArg)
+        column [ r.Phi; r.Mu; r.Phi * r.Mu; r.Mx; r.My; r.Theta; r.Dn; r.Nub; r.Nuo ])
+
+[<ExcelFunction(Name = "OAR.CONCRETE.COLUMNAXIS",
+                Description = "Column properties for bending about one axis. Spills 8 values down: Nuo kN | Nuot kN | Nub kN | Mub kNm | Muo kNm | kuo | φb | do mm",
+                Category = Category, IsThreadSafe = true)>]
+let concreteColumnAxis
+    ([<ExcelArgument(Name = "shape", Description = "Rect or Circle")>] shape: obj)
+    ([<ExcelArgument(Name = "dims", Description = "Rect: b, D (mm). Circle: D (mm)")>] dims: obj)
+    ([<ExcelArgument(Name = "bars", Description = "Rows: As mm² | depth from top mm | fsy MPa | x from left mm")>] bars: obj)
+    ([<ExcelArgument(Name = "fc", Description = "f'c, MPa")>] fc: obj)
+    ([<ExcelArgument(Name = "model", Description = "Rectangular, Curvilinear or Parabolic")>] model: obj)
+    ([<ExcelArgument(Name = "axis", Description = "x (Mx, top face in compression) or y (My, +x face in compression)")>] axisArg: obj)
+    ([<ExcelArgument(Name = "[classes]", Description = "Bar classes (any L → Class L φ)")>] classesArg: obj)
+    ([<ExcelArgument(Name = "[Ec]", Description = "Ec MPa. Blank = Table 3.1.2")>] ecArg: obj)
+    : obj =
+    guard (fun () ->
+        let sec, c = colArgs shape dims bars fc model ecArg
+        let a = Column.axisProps sec c (axisOf axisArg) (ductOf classesArg)
+        column [ a.Nuo; a.Nuot; a.Nub; a.Mub; a.Muo; a.Kuo; a.PhiB; a.Do ])
+
+[<ExcelFunction(Name = "OAR.CONCRETE.MNCOLUMN",
+                Description = "Column M–N curve for one axis, 40 rows from pure tension to the squash load: N kN | M kNm | φ | φN kN | φM kNm",
+                Category = Category, IsThreadSafe = true)>]
+let concreteMnColumn
+    ([<ExcelArgument(Name = "shape", Description = "Rect or Circle")>] shape: obj)
+    ([<ExcelArgument(Name = "dims", Description = "Rect: b, D (mm). Circle: D (mm)")>] dims: obj)
+    ([<ExcelArgument(Name = "bars", Description = "Rows: As mm² | depth from top mm | fsy MPa | x from left mm")>] bars: obj)
+    ([<ExcelArgument(Name = "fc", Description = "f'c, MPa")>] fc: obj)
+    ([<ExcelArgument(Name = "model", Description = "Rectangular, Curvilinear or Parabolic")>] model: obj)
+    ([<ExcelArgument(Name = "axis", Description = "x or y")>] axisArg: obj)
+    ([<ExcelArgument(Name = "[phi0]", Description = "φ0 for compression, default 0.6")>] phi0Arg: obj)
+    ([<ExcelArgument(Name = "[classes]", Description = "Bar classes (any L → Class L φ)")>] classesArg: obj)
+    ([<ExcelArgument(Name = "[Ec]", Description = "Ec MPa. Blank = Table 3.1.2")>] ecArg: obj)
+    : obj =
+    guard (fun () ->
+        let sec, c = colArgs shape dims bars fc model ecArg
+        Column.mnCurve sec c (axisOf axisArg) (defaultArg (numOpt "phi0" phi0Arg) 0.6) (ductOf classesArg)
+        |> List.map (fun (n, m, p) -> [ n; m; p; p * n; p * m ])
+        |> grid)
+
+[<ExcelFunction(Name = "OAR.CONCRETE.MCONTOUR",
+                Description = "Biaxial moment capacity contour at axial force N (closed loop, [points] + 1 rows): Mux | Muy | φMux | φMuy (kNm)",
+                Category = Category, IsThreadSafe = true)>]
+let concreteMContour
+    ([<ExcelArgument(Name = "shape", Description = "Rect or Circle")>] shape: obj)
+    ([<ExcelArgument(Name = "dims", Description = "Rect: b, D (mm). Circle: D (mm)")>] dims: obj)
+    ([<ExcelArgument(Name = "bars", Description = "Rows: As mm² | depth from top mm | fsy MPa | x from left mm")>] bars: obj)
+    ([<ExcelArgument(Name = "fc", Description = "f'c, MPa")>] fc: obj)
+    ([<ExcelArgument(Name = "model", Description = "Rectangular, Curvilinear or Parabolic")>] model: obj)
+    ([<ExcelArgument(Name = "N", Description = "Axial force, kN (compression +)")>] nArg: obj)
+    ([<ExcelArgument(Name = "[points]", Description = "Directions around the section, default 36")>] pointsArg: obj)
+    ([<ExcelArgument(Name = "[phi0]", Description = "φ0 for compression, default 0.6")>] phi0Arg: obj)
+    ([<ExcelArgument(Name = "[classes]", Description = "Bar classes (any L → Class L φ)")>] classesArg: obj)
+    ([<ExcelArgument(Name = "[Ec]", Description = "Ec MPa. Blank = Table 3.1.2")>] ecArg: obj)
+    : obj =
+    guard (fun () ->
+        let sec, c = colArgs shape dims bars fc model ecArg
+        let n = int (defaultArg (numOpt "points" pointsArg) 36.0)
+        Column.contour sec c (num "N" nArg) n (defaultArg (numOpt "phi0" phi0Arg) 0.6) (ductOf classesArg)
+        |> List.map (fun r -> [ r.Mx; r.My; r.Phi * r.Mx; r.Phi * r.My ])
+        |> grid)
