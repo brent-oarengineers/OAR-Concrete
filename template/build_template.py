@@ -223,9 +223,14 @@ def build_tab(name, d):
     ws = wb.create_sheet(name)
     N = {}  # named cells → absolute refs, used as «name» in formulas
     def nm(n, ref): N[n] = "$" + "".join(ch for ch in ref if ch.isalpha()) + "$" + "".join(ch for ch in ref if ch.isdigit())
+    # depth of a single mat from the top face: D/2, or at the top / bottom cover (+ ligature for a beam)
+    _lig = f'IF(«type»="Beam",{barv("«lig»", 2)},0)'
+    _dbm = f'IFERROR({barv("«tmb»", 2)},0)'
+    MATD = (f'IF(«layout»="Single mat – at top cover",«tcov»+{_lig}+{_dbm}/2,'
+            f'IF(«layout»="Single mat – at bottom cover",«D»-«bcov»-{_lig}-{_dbm}/2,«D»/2))')
     def Fx(s):
         if not isinstance(s, str): return s
-        s = s.replace("«LO»", 'LEFT(«lmode»,1)="L"').replace("«LEG»", '«wmax»="Legacy"').replace("«CEN»", '«layout»="Single central mat"')
+        s = s.replace("«LO»", 'LEFT(«lmode»,1)="L"').replace("«LEG»", '«wmax»="Legacy"').replace("«CEN»", 'LEFT(«layout»,6)="Single"').replace("«MATD»", MATD)
         for k in sorted(N, key=len, reverse=True): s = s.replace(f"«{k}»", N[k])
         assert "«" not in s, s
         return s
@@ -280,7 +285,7 @@ def build_tab(name, d):
     lab("B40", "Creep factor for SLS stresses, φcc"); IN("E40", d.get("phicc", 0), "0.0", name="phicc"); lab("H40", "0 = short-term n = Es / Ec", sz=7, color=GREY)
 
     lab("B41", "Reinforcement layout"); IN("E41:F41", d.get("layout", "Top & bottom"), name="layout")
-    lab("H41", "central: one mat at D/2, extras above / below it", sz=7, color=GREY)
+    lab("H41", "single mat: Top column = mat + extras above, Bottom = extras below", sz=7, color=GREY)
     r = 42; heading(ws, r, "Reinforcement")
     table_header(ws, 43, [("E43", "Top"), ("F43", "Bottom")])
     pend.append(("E43", '=IF(«CEN»,"Mat / above","Top")')); pend.append(("F43", '=IF(«CEN»,"Below mat","Bottom")'))
@@ -339,11 +344,11 @@ def build_tab(name, d):
     def db(key): return f'IFERROR({barv(key, 2)},0)'
     layers = [
         (69, "Top – main", "t", "m"), (70, "Top – extra", "t", "x"), (71, "Bottom – main", "b", "m"), (72, "Bottom – extra", "b", "x")]
-    cen_lab = {69: "Central mat", 70: "Extra – above mat", 71: "Bottom – main", 72: "Extra – below mat"}
+    cen_lab = {69: "Single mat", 70: "Extra – above mat", 71: "Bottom – main", 72: "Extra – below mat"}
     for rr, t, f, k in layers:
         ws.merge_cells(f"B{rr}:C{rr}"); lab(f"B{rr}", t, sz=8); pend.append((f"B{rr}", f'=IF(«CEN»,"{cen_lab[rr]}","{t}")'))
         if k == "m":
-            pend.append((f"D{rr}", f'=IF(E{rr}=0,IF(AND(«CEN»,"{f}"="b"),"– (central mat above)","none"),«{f}mb»&IF(«type»="Slab"," @ "&«{f}mn»&" ("&TEXT({barv(f"«{f}mb»", 3)}*1000/«{f}mn»,"0")&" mm²/m)"," × "&«{f}mn»))'))
+            pend.append((f"D{rr}", f'=IF(E{rr}=0,IF(AND(«CEN»,"{f}"="b"),"– (single mat above)","none"),«{f}mb»&IF(«type»="Slab"," @ "&«{f}mn»&" ("&TEXT({barv(f"«{f}mb»", 3)}*1000/«{f}mn»,"0")&" mm²/m)"," × "&«{f}mn»))'))
             area = area_main(f)
             dep_off = f'(«{f}cov»+{LIG}+{db(f"«{f}mb»")}/2)'
             nbars = f'IF(E{rr}=0,0,IF(«type»="Slab",«b»/«{f}mn»,«{f}mn»))'
@@ -355,8 +360,8 @@ def build_tab(name, d):
         ws[f"D{rr}"].font = font(8, color=GREY)
         CA(f"E{rr}", f"={area}", "0", name=f"As{f}{k}")
         normal = dep_off if f == "t" else f"«D»-{dep_off}"
-        central = {("t", "m"): "«D»/2", ("t", "x"): f'«D»/2-{db("«tmb»")}/2-{db("«txb»")}/2',
-                   ("b", "m"): "«D»/2", ("b", "x"): f'«D»/2+{db("«tmb»")}/2+{db("«bxb»")}/2'}[(f, k)]
+        central = {("t", "m"): "«MATD»", ("t", "x"): f'«MATD»-{db("«tmb»")}/2-{db("«txb»")}/2',
+                   ("b", "m"): "«D»/2", ("b", "x"): f'«MATD»+{db("«tmb»")}/2+{db("«bxb»")}/2'}[(f, k)]
         CA(f"F{rr}", f"=IF(«CEN»,{central},{normal})", "0.0", name=f"dep{f}{k}")
         barref = f"«{f}mb»" if k == "m" else f"«{f}xb»"
         CA(f"G{rr}", f'=IF(E{rr}=0,"",{barv(barref, 4)})', "0", name=f"fsy{f}{k}")
@@ -428,7 +433,7 @@ def build_tab(name, d):
     # A face with no steel uses the other face's layers (single layer at cover); a central mat serves both directions,
     # with the extras below it (sagging) or above it (hogging).
     r = ULT_END + 2; heading(ws, r, "Tension Reinforcement by Direction")
-    r += 1; note(ws, r, "Used for φ class, minimum strength and crack control. A face with no steel takes the other face's layers; a central mat serves both directions.")
+    r += 1; note(ws, r, "Used for φ class, minimum strength and crack control. A face with no steel takes the other face's layers; a single mat serves both directions.")
     r += 1
     table_header(ws, r, [(f"B{r}:C{r}", "Direction"), (f"D{r}", "Source"), (f"E{r}", "As (mm²)"), (f"F{r}", "depth (mm)"),
                          (f"G{r}", "fsy (MPa)"), (f"H{r}", "db (mm)"), (f"I{r}", "Class"), (f"J{r}:K{r}", "bars in b")])
@@ -440,7 +445,7 @@ def build_tab(name, d):
             r += 1; ws.merge_cells(f"B{r}:C{r}"); lab(f"B{r}", f"{lab_} – {'main' if k == 'm' else 'extra'}", sz=8)
             own_t = {"s": "bottom", "h": "top"}[d_]; oth_t = {"s": "top", "h": "bottom"}[d_]
             kind = "main" if k == "m" else "extras"
-            cen_t = "central mat" if k == "m" else ("extras below mat" if d_ == "s" else "extras above mat")
+            cen_t = "single mat" if k == "m" else ("extras below mat" if d_ == "s" else "extras above mat")
             pend.append((f"D{r}", f'=IF(«CEN»,"{cen_t}",IF({useO[d_]},"{oth_t} {kind} (no {own_t} steel)","{own_t} {kind}"))'))
             ws[f"D{r}"].font = font(8, color=GREY)
             for col, nf in (("E", "0"), ("F", "0.0"), ("G", "0"), ("H", "0.0"), ("I", None), ("J", "0.0")):
@@ -570,7 +575,7 @@ def build_tab(name, d):
     ws.conditional_formatting.add("I10:K10", FormulaRule(formula=['$I$10="UPDATE ADD-IN"'], fill=PatternFill(bgColor="C55A11"), font=Font(color="FFFFFF", bold=True)))
     ws.conditional_formatting.add("B7", FormulaRule(formula=['OR($V$7,$V$4="")'], font=Font(color=RED, bold=True, italic=False)))
     def face(f): return (f'IF(«type»="Slab",«{f}mb»&"@"&«{f}mn»,«{f}mn»&«{f}mb»)&IF(N(«{f}xn»)>0," + "&«{f}xn»&«{f}xb»,"")')
-    cen_sum = ('"Central "&IF(«type»="Slab",«tmb»&"@"&«tmn»,«tmn»&«tmb»)&IF(N(«Astx»)>0," + "&«txn»&«txb»&" above","")&IF(N(«Asbx»)>0," + "&«bxn»&«bxb»&" below","")')
+    cen_sum = ('IF(«layout»="Single mat – central","Central ",IF(«layout»="Single mat – at top cover","Top mat ","Bottom mat "))&IF(«type»="Slab",«tmb»&"@"&«tmn»,«tmn»&«tmb»)&IF(N(«Astx»)>0," + "&«txn»&«txb»&" above","")&IF(N(«Asbx»)>0," + "&«bxn»&«bxb»&" below","")')
     pend.append(("B11", f'=IF(«CEN»,{cen_sum},"Top "&IF(N(«Astm»)+N(«Astx»)=0,"none",{face("t")})&"  ·  bottom "&IF(N(«Asbm»)+N(«Asbx»)=0,"none",{face("b")}))&"  ·  "&«model»&IF(«LO»,"  ·  Class L: L steel only","")'))
     ws["B11"].font = font(7, color=GREY)
     c = ws["F11"]
@@ -624,13 +629,14 @@ def build_tab(name, d):
     def dvl(formula, ref):
         v = DataValidation(type="list", formula1=formula, allow_blank=True); ws.add_data_validation(v); v.add(ref)
     dvl('"Slab,Beam"', "E34"); dvl('"Rectangular,Curvilinear,Parabolic"', "E38"); dvl("=BarList", "E45:F45"); dvl("=BarList", "E48:F48")
-    dvl('"Layer 1,Layer 2"', "E49:F49"); dvl("=BarList", "E51"); dvl('"Beams or walls,Columns"', "E52"); dvl('"Minor,Moderate,Strong"', "E63"); dvl('"Whole section 0.65,L steel only"', "E53"); dvl('"0.2 mm,0.3 mm,0.4 mm,Legacy"', "E65"); dvl('"Top & bottom,Single central mat"', "E41")
+    dvl('"Layer 1,Layer 2"', "E49:F49"); dvl("=BarList", "E51"); dvl('"Beams or walls,Columns"', "E52"); dvl('"Minor,Moderate,Strong"', "E63"); dvl('"Whole section 0.65,L steel only"', "E53"); dvl('"0.2 mm,0.3 mm,0.4 mm,Legacy"', "E65"); dvl('"Top & bottom,Single mat – central,Single mat – at top cover,Single mat – at bottom cover"', "E41")
     rules = [("E51", '«type»<>"Beam"', "B51"),
              ("E52:F52", '«type»<>"Slab"', "B52"),
              ("E63:F64", '«type»<>"Slab"', "B63:B64"),
              ("E50", '«txp»<>"Layer 2"', "E50"), ("F50", '«bxp»<>"Layer 2"', "F50"),
              ("E47:E50", "N(«txn»)=0", "E47"), ("F47:F50", "N(«bxn»)=0", "F47"),
-             ("E44:F44", "«CEN»", "B44"), ("F45:F46", "«CEN»", "F45"), ("E49:F50", "«CEN»", "B49:B50")]
+             ("E44", 'AND(«CEN»,«layout»<>"Single mat – at top cover")', "E44"),
+             ("F44", 'AND(«CEN»,«layout»<>"Single mat – at bottom cover")', "F44"), ("F45:F46", "«CEN»", "F45"), ("E49:F50", "«CEN»", "B49:B50")]
     for ref, cond, labref in rules:
         f = Fx(cond)
         ws.conditional_formatting.add(ref, FormulaRule(formula=[f], fill=PatternFill(bgColor=NA_FILL), font=Font(color=NA_FONT)))
@@ -655,7 +661,7 @@ b1 = dict(loc="Helensvale – wide beam 3", type="Beam", b=1200, D=600, fc=40, m
           bot=dict(cov=50, mb="N24", mn=6, xn=0, xb="N20", xp="Layer 1", gap=25),
           sag=dict(Mu=180, Ms=100, Ms1=170), hog=dict(Mu=943.8, Ms=726, Ms1=726))
 # S2: pool floor / slab on ground with one central mat (SL92 = L9 @ 200) and N12 extras under the mat
-s2 = dict(loc="Pool floor – single central mat", type="Slab", b=1000, D=150, fc=32, model="Rectangular", layout="Single central mat",
+s2 = dict(loc="Pool floor – single central mat", type="Slab", b=1000, D=150, fc=32, model="Rectangular", layout="Single mat – central",
           top=dict(cov=50, mb="L9", mn=200, xn=0, xb="N12", xp="Layer 1", gap=25),
           bot=dict(cov=50, mb="None", mn=200, xn=5, xb="N12", xp="Layer 1", gap=25),
           sag=dict(Mu=6.5, Ms=4.0, Ms1=4.5), hog=dict(Mu=3.0, Ms=1.8, Ms1=2.0), control="Minor", restraint=0.75)

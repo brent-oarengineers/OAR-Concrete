@@ -3,6 +3,11 @@
 Each version that reaches `main` is built, tested and published automatically as a GitHub Release.
 The calc sheet shows the version it was calculated with (under the green title bar).
 
+## v0.3.2
+- Single mat position: *Reinforcement layout* now offers **Single mat – central**, **– at top cover** and
+  **– at bottom cover**. The mat (Top column) sits at D/2 or at the entered top / bottom cover; extras still go on top of it
+  (Top column) or under it (Bottom column).
+
 ## v0.3.1
 - Class S reinforcement: S10–S32 (fsy 250 MPa, deformed, ductility Class N, same areas as N bars) on the Bars tab.
 
