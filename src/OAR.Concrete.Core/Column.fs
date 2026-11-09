@@ -56,7 +56,12 @@ type AxisProps =
       Kuo: float
       PhiB: float
       /// extreme compression fibre to outermost tension bar, mm
-      Do: float }
+      Do: float
+      /// decompression point: zero strain at the outermost tension bar (dn = do), kN and kN·m
+      Nud: float
+      Mud: float
+      /// φ at pure tension (Table 2.2.2)
+      PhiT: float }
 
 let axisProps (sec: Section) (c: Concrete) (thetaDeg: float) (duct: Design.Ductility) =
     let d = dirOf thetaDeg
@@ -64,14 +69,20 @@ let axisProps (sec: Section) (c: Concrete) (thetaDeg: float) (duct: Design.Ducti
     let outer = sec.Bars |> List.minBy (fun b -> sOf d { X = b.X; Y = b.Y })
     let dnb = Design.dnBalanced bend.Do outer.Steel.Fsy outer.Steel.Es
     let bal = Ultimate.evaluate sec c thetaDeg dnb DefaultStrips
+    let dec = Ultimate.evaluate sec c thetaDeg bend.Do DefaultStrips
+    let nuot = -(sec.Bars |> List.sumBy (fun b -> b.Area * b.Steel.Fsy)) / 1000.0
+    let phiB = Design.phiBending duct bend.Kuo
     { Nuo = Design.squash c.Fc (gross sec).A (sec.Bars |> List.map (fun b -> b.Area, b.Steel.Fsy)) / 1000.0
-      Nuot = -(sec.Bars |> List.sumBy (fun b -> b.Area * b.Steel.Fsy)) / 1000.0
+      Nuot = nuot
       Nub = bal.N / 1000.0
       Mub = bal.Mu / 1e6
       Muo = bend.Mu
       Kuo = bend.Kuo
-      PhiB = Design.phiBending duct bend.Kuo
-      Do = bend.Do }
+      PhiB = phiB
+      Do = bend.Do
+      Nud = dec.N / 1000.0
+      Mud = dec.Mu / 1e6
+      PhiT = Design.phiTension duct phiB nuot nuot }
 
 // ---------------------------------------------------------------------------------------------
 // Capacity at an axial force

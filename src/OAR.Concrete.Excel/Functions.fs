@@ -10,7 +10,7 @@ open OAR.Concrete.Materials
 [<Literal>]
 let Category = "OAR Concrete"
 
-let private version = "0.4.1"
+let private version = "0.4.2"
 
 // ---------- conversion helpers (same as OAR Timber) ----------
 
@@ -280,7 +280,7 @@ let concreteColumn
         column [ r.Phi; r.Mu; r.Phi * r.Mu; r.Mx; r.My; r.Theta; r.Dn; r.Nub; r.Nuo ])
 
 [<ExcelFunction(Name = "OAR.CONCRETE.COLUMNAXIS",
-                Description = "Column properties for bending about one axis. Spills 8 values down: Nuo kN | Nuot kN | Nub kN | Mub kNm | Muo kNm | kuo | φb | do mm",
+                Description = "Column properties for bending about one axis. Spills 11 values down: Nuo kN | Nuot kN | Nub kN | Mub kNm | Muo kNm | kuo | φb | do mm | Nud kN | Mud kNm | φ tension",
                 Category = Category, IsThreadSafe = true)>]
 let concreteColumnAxis
     ([<ExcelArgument(Name = "shape", Description = "Rect or Circle")>] shape: obj)
@@ -295,7 +295,7 @@ let concreteColumnAxis
     guard (fun () ->
         let sec, c = colArgs shape dims bars fc model ecArg
         let a = Column.axisProps sec c (axisOf axisArg) (ductOf classesArg)
-        column [ a.Nuo; a.Nuot; a.Nub; a.Mub; a.Muo; a.Kuo; a.PhiB; a.Do ])
+        column [ a.Nuo; a.Nuot; a.Nub; a.Mub; a.Muo; a.Kuo; a.PhiB; a.Do; a.Nud; a.Mud; a.PhiT ])
 
 [<ExcelFunction(Name = "OAR.CONCRETE.MNCOLUMN",
                 Description = "Column M–N curve for one axis, 40 rows from pure tension to the squash load: N kN | M kNm | φ | φN kN | φM kNm",

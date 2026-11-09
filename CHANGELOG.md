@@ -3,6 +3,12 @@
 Each version that reaches `main` is built, tested and published automatically as a GitHub Release.
 The calc sheet shows the version it was calculated with (under the green title bar).
 
+## v0.4.2
+- Column sheet: new **Interaction Curve – Key Points** table on page 1 (φN and φM about each axis at squash, decompression,
+  balanced, pure bending and pure tension, with φ at each point). Load cases now start page 2.
+- `OAR.CONCRETE.COLUMNAXIS` spills 11 values: adds the decompression point Nud, Mud (zero strain at the outermost
+  tension bar, dn = do) and φ at pure tension.
+
 ## v0.4.1
 - Column sheet charts cleaned up: no chart titles or legends (caption above each chart, colour key in the note),
   thin blue / orange lines, light major and minor gridlines, axes at the left and bottom, square border.

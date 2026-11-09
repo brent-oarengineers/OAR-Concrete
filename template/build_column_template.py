@@ -120,50 +120,73 @@ def build_tab(name, d):
                       '"Copy this tab for additional columns.   ·   Calculated with OAR Concrete "&$V$4))')
     ws.conditional_formatting.add("B7", FormulaRule(formula=['OR($V$7,$V$4="")'], font=Font(color=RED, bold=True, italic=False)))
 
+    # ================================================================== KEY POINTS OF THE INTERACTION CURVE (summary, page 1)
+    heading(ws, 28, "Interaction Curve – Key Points (design capacities, uniaxial)")
+    table_header(ws, 29, [("B29:C29", "Point"), ("D29", "Definition"), ("E29", "φN (kN)"), ("F29", "φMx (kNm)"),
+                          ("G29", "φN (kN)"), ("H29", "φMy (kNm)"), ("I29", "φ  x"), ("J29", "φ  y")])
+    def phin(a, n): return f"IF({n}>=«Nub{a}»,«phi0»,«phi0»+(«phib{a}»-«phi0»)*(1-{n}/«Nub{a}»))"
+    KP = [("Squash", "pure compression, M = 0 (Cl 10.6.2.2)",
+           lambda a: ("«phi0»*«Nuo{}»".format(a), "0", "«phi0»")),
+          ("Decompression", "zero strain at outermost bar (kuo = 1)",
+           lambda a: (f"{phin(a, f'«Nud{a}»')}*«Nud{a}»", f"{phin(a, f'«Nud{a}»')}*«Mud{a}»", phin(a, f"«Nud{a}»"))),
+          ("Balanced", "outermost tension bar at yield",
+           lambda a: (f"«phi0»*«Nub{a}»", f"«phi0»*«Mub{a}»", "«phi0»")),
+          ("Pure bending", "N = 0",
+           lambda a: ("0", f"«phib{a}»*«Muo{a}»", f"«phib{a}»")),
+          ("Pure tension", "all bars yielded, M = 0",
+           lambda a: (f"«phit{a}»*«Nuot{a}»", "0", f"«phit{a}»"))]
+    for k, (pt, ds, fn) in enumerate(KP):
+        rr = 30 + k
+        ws.merge_cells(f"B{rr}:C{rr}"); lab(f"B{rr}", pt); desc(rr, ds)
+        for a, cN, cM, cP in (("x", "E", "F", "I"), ("y", "G", "H", "J")):
+            fN, fM, fP = fn(a)
+            CA(f"{cN}{rr}", f'=IFERROR({fN},"")', "0"); CA(f"{cM}{rr}", f'=IFERROR({fM},"")', "0.0"); CA(f"{cP}{rr}", f'=IFERROR({fP},"")', "0.00")
+    note(ws, 35, "Uniaxial points from OAR.CONCRETE.COLUMNAXIS (calculation page). N compression +. φ from Table 2.2.2: φ0 at and above Nub, φb at N = 0, Class N in tension → 0.85.")
+
     # ================================================================== INPUTS (page 1)
-    heading(ws, 28, "Section and Concrete")
-    lab("B29", "Shape"); IN("E29:F29", d["shape"], name="shape")
-    F("B30", '=IF(«CIRC»,"Diameter D","Width b (x direction)")'); ws["B30"].font = font(9)
-    IN("E30", d["b"], "0", name="b"); U("F30", "mm")
-    lab("B31", "Depth D (y direction)"); IN("E31", d.get("D"), "0", name="D"); U("F31", "mm"); small("H31", "rectangular only")
-    lab("B32", "Concrete strength f'c"); IN("E32", d["fc"], "0", name="fc"); U("F32", "MPa")
-    lab("B33", "Stress block (ULS)"); IN("E33:F33", d.get("model", "Rectangular"), name="model")
-    lab("B34", "Ec override"); IN("E34", None, "0", name="ecin"); U("F34", "MPa"); small("H34", "blank = Table 3.1.2")
-    lab("B35", "φ0 for compression, Table 2.2.2(d)"); IN("E35", d.get("phi0", 0.6), "0.00", name="phi0"); small("H35", "Amdt 2: φ0 = 0.65 kφ – enter the value")
-    lab("B36", "Biaxial check governing"); IN("E36:F36", d.get("method", "Cl 10.6.4"), name="method"); small("H36", "circular: strain compatibility")
+    heading(ws, 37, "Section and Concrete")
+    lab("B38", "Shape"); IN("E38:F38", d["shape"], name="shape")
+    F("B39", '=IF(«CIRC»,"Diameter D","Width b (x direction)")'); ws["B39"].font = font(9)
+    IN("E39", d["b"], "0", name="b"); U("F39", "mm")
+    lab("B40", "Depth D (y direction)"); IN("E40", d.get("D"), "0", name="D"); U("F40", "mm"); small("H40", "rectangular only")
+    lab("B41", "Concrete strength f'c"); IN("E41", d["fc"], "0", name="fc"); U("F41", "MPa")
+    lab("B42", "Stress block (ULS)"); IN("E42:F42", d.get("model", "Rectangular"), name="model")
+    lab("B43", "Ec override"); IN("E43", None, "0", name="ecin"); U("F43", "MPa"); small("H43", "blank = Table 3.1.2")
+    lab("B44", "φ0 for compression, Table 2.2.2(d)"); IN("E44", d.get("phi0", 0.6), "0.00", name="phi0"); small("H44", "Amdt 2: φ0 = 0.65 kφ – enter the value")
+    lab("B45", "Biaxial check governing"); IN("E45:F45", d.get("method", "Cl 10.6.4"), name="method"); small("H45", "circular: strain compatibility")
 
-    heading(ws, 38, "Reinforcement – typical layout")
-    lab("B39", "Cover to ligature"); IN("E39", d["cover"], "0", name="cover"); U("F39", "mm")
-    lab("B40", "Ligature bar"); IN("E40", d["lig"], name="lig")
-    lab("B41", "Main bar (typical)"); IN("E41", d["bar"], name="bar"); small("H41", '"None" = custom bars only')
-    F("B42", '=IF(«CIRC»,"Number of bars","Bars per b face (incl. corners)")'); ws["B42"].font = font(9)
-    IN("E42", d["n1"], "0", name="n1")
-    lab("B43", "Bars per D face (incl. corners)"); IN("E43", d.get("n2"), "0", name="n2"); small("H43", "rectangular only")
-    note(ws, 44, "Custom bars: x, y from the section centre and bar size in the Bar Schedule (last page). They are added to the typical layout.")
+    heading(ws, 47, "Reinforcement – typical layout")
+    lab("B48", "Cover to ligature"); IN("E48", d["cover"], "0", name="cover"); U("F48", "mm")
+    lab("B49", "Ligature bar"); IN("E49", d["lig"], name="lig")
+    lab("B50", "Main bar (typical)"); IN("E50", d["bar"], name="bar"); small("H50", '"None" = custom bars only')
+    F("B51", '=IF(«CIRC»,"Number of bars","Bars per b face (incl. corners)")'); ws["B51"].font = font(9)
+    IN("E51", d["n1"], "0", name="n1")
+    lab("B52", "Bars per D face (incl. corners)"); IN("E52", d.get("n2"), "0", name="n2"); small("H52", "rectangular only")
+    note(ws, 53, "Custom bars: x, y from the section centre and bar size in the Bar Schedule (last page). They are added to the typical layout.")
 
-    heading(ws, 46, "Slenderness – braced column (Cl 10.3, 10.4)")
-    table_header(ws, 47, [("E47", "x axis (Mx)"), ("F47", "y axis (My)")])
-    lab("B48", "Unsupported length Lu"); IN("E48", d["Lu"], "0", name="Lu"); U("G48", "mm")
-    lab("B49", "Effective length factor k"); IN("E49", d.get("kx", 1.0), "0.00", name="kx"); IN("F49", d.get("ky", 1.0), "0.00", name="ky")
-    lab("B50", "βd = G / (G + Q), sustained axial load"); IN("E50", d.get("betad", 0.6), "0.00", name="betad")
-    note(ws, 51, "Unbraced (sway) columns are not covered. βd is taken as 0 where Le/r ≤ 40 and N* ≤ M2*/(2D) (Cl 10.4.3).")
+    heading(ws, 55, "Slenderness – braced column (Cl 10.3, 10.4)")
+    table_header(ws, 56, [("E56", "x axis (Mx)"), ("F56", "y axis (My)")])
+    lab("B57", "Unsupported length Lu"); IN("E57", d["Lu"], "0", name="Lu"); U("G57", "mm")
+    lab("B58", "Effective length factor k"); IN("E58", d.get("kx", 1.0), "0.00", name="kx"); IN("F58", d.get("ky", 1.0), "0.00", name="ky")
+    lab("B59", "βd = G / (G + Q), sustained axial load"); IN("E59", d.get("betad", 0.6), "0.00", name="betad")
+    note(ws, 60, "Unbraced (sway) columns are not covered. βd is taken as 0 where Le/r ≤ 40 and N* ≤ M2*/(2D) (Cl 10.4.3).")
 
-    heading(ws, 53, "Load Cases (ULS)")
-    table_header(ws, 54, [("B54:C54", "Case"), ("D54", "Description"), ("E54", "N* (kN)"), ("F54", "M*x top"), ("G54", "M*x bot"),
-                          ("H54", "M*y top"), ("I54", "M*y bot")])
-    LC0 = 55
+    heading(ws, 62, "Load Cases (ULS)")
+    table_header(ws, 63, [("B63:C63", "Case"), ("D63", "Description"), ("E63", "N* (kN)"), ("F63", "M*x top"), ("G63", "M*x bot"),
+                          ("H63", "M*y top"), ("I63", "M*y bot")])
+    LC0 = 64
     for i in range(NLC):
         r = LC0 + i; lc = d["lcs"][i] if i < len(d["lcs"]) else None
         IN(f"B{r}:C{r}", f"LC{i + 1}")
         IN(f"D{r}", lc[0] if lc else None, al=LEFT)
         for j, col in enumerate("EFGHI"): IN(f"{col}{r}", lc[1 + j] if lc else None, "0.0")
-    small("J54", "kNm")
-    note(ws, 61, "N* compression +. End moments: same sign = single curvature. Blank N* = case not used. Minimum eccentricity 0.05D applies about each axis (Cl 10.1.2).")
-    lab("B62", "Moment contour plotted for case"); IN("E62", d.get("contour", 1), "0", name="lcsel"); small("F62", "1 – 6")
+    small("J63", "kNm")
+    note(ws, 70, "N* compression +. End moments: same sign = single curvature. Blank N* = case not used. Minimum eccentricity 0.05D applies about each axis (Cl 10.1.2).")
+    lab("B71", "Moment contour plotted for case"); IN("E71", d.get("contour", 1), "0", name="lcsel"); small("F71", "1 – 6")
 
     # ================================================================== SECTION + BAR SCHEDULE (helpers first; formulas reference them)
     # bar schedule rows
-    BS0 = 178
+    BS0 = 190
     TYP0, TYP1 = BS0 + 1, BS0 + NTYP
     CUS0, CUS1 = TYP1 + 1, TYP1 + NCUS
     BARS_ARG = f"$L${TYP0}:$O${CUS1}"
@@ -172,40 +195,41 @@ def build_tab(name, d):
     MOD = '«fc»,«model»'
 
     # ================================================================== CALCULATIONS (page 2)
-    heading(ws, 64, "Section Properties")
-    table_header(ws, 65, [("E65", "x axis (Mx)"), ("F65", "y axis (My)")])
-    r = 66; sym(r, "Ag"); desc(r, '=IF(«CIRC»,"π D² / 4","b D")'); CA(f"E{r}", '=IF(«CIRC»,PI()*«b»^2/4,«b»*«D»)', "0", name="Ag"); U(f"G{r}", "mm²")
-    r = 67; sym(r, "As"); desc(r, "all bars (Bar Schedule)"); CA(f"E{r}", f"=SUM($L${TYP0}:$L${CUS1})", "0", name="As"); U(f"G{r}", "mm²")
-    r = 68; sym(r, "ρ"); desc(r, "As / Ag"); CA(f"E{r}", "=«As»/«Ag»", "0.00%", name="rho")
-    r = 69; sym(r, "n"); desc(r, "typical | custom bars")
+    heading(ws, 73, "Section Properties")
+    table_header(ws, 74, [("E74", "x axis (Mx)"), ("F74", "y axis (My)")])
+    r = 75; sym(r, "Ag"); desc(r, '=IF(«CIRC»,"π D² / 4","b D")'); CA(f"E{r}", '=IF(«CIRC»,PI()*«b»^2/4,«b»*«D»)', "0", name="Ag"); U(f"G{r}", "mm²")
+    r = 76; sym(r, "As"); desc(r, "all bars (Bar Schedule)"); CA(f"E{r}", f"=SUM($L${TYP0}:$L${CUS1})", "0", name="As"); U(f"G{r}", "mm²")
+    r = 77; sym(r, "ρ"); desc(r, "As / Ag"); CA(f"E{r}", "=«As»/«Ag»", "0.00%", name="rho")
+    r = 78; sym(r, "n"); desc(r, "typical | custom bars")
     CA(f"E{r}", f'=COUNTIFS($G${TYP0}:$G${TYP1},"<>",$H${TYP0}:$H${TYP1},">0")', "0", name="ntyp")
     CA(f"F{r}", f'=COUNTIF($H${CUS0}:$H${CUS1},">0")', "0", name="ncus")
-    r = 70; sym(r, "edge"); desc(r, "cover + ligature + db / 2")
+    r = 79; sym(r, "edge"); desc(r, "cover + ligature + db / 2")
     CA(f"E{r}", f'=«cover»+IFERROR({barv("«lig»", 2)},0)+IFERROR({barv("«bar»", 2)},0)/2', "0.0", name="edge"); U(f"G{r}", "mm")
-    r = 71; sym(r, "Dd"); desc(r, "section depth in the bending direction")
+    r = 80; sym(r, "Dd"); desc(r, "section depth in the bending direction")
     CA(f"E{r}", '=IF(«CIRC»,«b»,«D»)', "0", name="Dx"); CA(f"F{r}", '=«b»', "0", name="Dy"); U(f"G{r}", "mm")
-    r = 72; sym(r, "r"); desc(r, '=IF(«CIRC»,"0.25 D (Cl 10.5.2)","0.3 × depth (Cl 10.5.2)")')
+    r = 81; sym(r, "r"); desc(r, '=IF(«CIRC»,"0.25 D (Cl 10.5.2)","0.3 × depth (Cl 10.5.2)")')
     CA(f"E{r}", '=IF(«CIRC»,0.25,0.3)*«Dx»', "0.0", name="rx"); CA(f"F{r}", '=IF(«CIRC»,0.25,0.3)*«Dy»', "0.0", name="ry"); U(f"G{r}", "mm")
-    r = 73; sym(r, "Le"); desc(r, "k Lu"); CA(f"E{r}", "=«kx»*«Lu»", "0", name="Lex"); CA(f"F{r}", "=«ky»*«Lu»", "0", name="Ley"); U(f"G{r}", "mm")
-    r = 74; sym(r, "Le / r"); desc(r, "slenderness ratio"); CA(f"E{r}", "=«Lex»/«rx»", "0.0", name="slx"); CA(f"F{r}", "=«Ley»/«ry»", "0.0", name="sly")
-    r = 75; sym(r, "Ec"); desc(r, '=IF(N(«ecin»)>0,"entered","Table 3.1.2, interpolated")')
+    r = 82; sym(r, "Le"); desc(r, "k Lu"); CA(f"E{r}", "=«kx»*«Lu»", "0", name="Lex"); CA(f"F{r}", "=«ky»*«Lu»", "0", name="Ley"); U(f"G{r}", "mm")
+    r = 83; sym(r, "Le / r"); desc(r, "slenderness ratio"); CA(f"E{r}", "=«Lex»/«rx»", "0.0", name="slx"); CA(f"F{r}", "=«Ley»/«ry»", "0.0", name="sly")
+    r = 84; sym(r, "Ec"); desc(r, '=IF(N(«ecin»)>0,"entered","Table 3.1.2, interpolated")')
     I_ = "MIN(MATCH(«fc»,EcFc,1),7)"
     CA(f"E{r}", f"=IF(N(«ecin»)>0,«ecin»,INDEX(EcVal,{I_})+(«fc»-INDEX(EcFc,{I_}))*(INDEX(EcVal,{I_}+1)-INDEX(EcVal,{I_}))/(INDEX(EcFc,{I_}+1)-INDEX(EcFc,{I_})))", "0", name="Ec")
     U(f"G{r}", "MPa")
 
-    heading(ws, 77, "Axis Properties (OAR Concrete add-in)")
-    note(ws, 78, "OAR.CONCRETE.COLUMNAXIS: strain compatibility, εcu 0.003. Nuo = α1 f'c Ac + fsy As (Ac net of bars, Cl 10.6.2.2); balanced point with the outermost tension bar at yield.")
-    table_header(ws, 79, [("E79", "x axis (Mx)"), ("F79", "y axis (My)")])
+    heading(ws, 86, "Axis Properties (OAR Concrete add-in)")
+    note(ws, 87, "OAR.CONCRETE.COLUMNAXIS: strain compatibility, εcu 0.003. Nuo = α1 f'c Ac + fsy As (Ac net of bars, Cl 10.6.2.2); balanced point with the outermost tension bar at yield.")
+    table_header(ws, 88, [("E88", "x axis (Mx)"), ("F88", "y axis (My)")])
     AX = [("Nuo", "squash load", "0", "kN"), ("Nuot", "pure tension", "0", "kN"), ("Nub", "balanced point", "0", "kN"),
           ("Mub", "moment at Nub (Mc, Cl 10.4.4)", "0.0", "kNm"), ("Muo", "pure bending", "0.0", "kNm"), ("kuo", "at pure bending", "0.000", ""),
-          ("φb", "Tbl 2.2.2, pure bending", "0.000", ""), ("do", "to outermost tension bar", "0.0", "mm")]
-    AX0 = 80
+          ("φb", "Tbl 2.2.2, pure bending", "0.000", ""), ("do", "to outermost tension bar", "0.0", "mm"),
+          ("Nud", "decompression (dn = do)", "0", "kN"), ("Mud", "moment at Nud", "0.0", "kNm"), ("φt", "Tbl 2.2.2, pure tension", "0.000", "")]
+    AX0 = 89
     for i, (s_, ds, nf, u) in enumerate(AX):
         rr = AX0 + i; sym(rr, s_); desc(rr, ds); calc(ws, f"E{rr}", None, nf); calc(ws, f"F{rr}", None, nf); U(f"G{rr}", u)
     AX1 = AX0 + len(AX) - 1
     for col, ax in (("E", "x"), ("F", "y")):
         F(f"{col}{AX0}", f'=OAR.CONCRETE.COLUMNAXIS({SEC},{BARS_ARG},{MOD},"{ax}",{CLS_ARG},«Ec»)'); arrays.append(f"{col}{AX0}:{col}{AX1}")
-        nm(f"Nuo{ax}", f"{col}{AX0}"); nm(f"Nub{ax}", f"{col}{AX0 + 2}"); nm(f"Mub{ax}", f"{col}{AX0 + 3}"); nm(f"do{ax}", f"{col}{AX0 + 7}")
+        for k, n_ in enumerate(["Nuo", "Nuot", "Nub", "Mub", "Muo", "kuo", "phib", "do", "Nud", "Mud", "phit"]): nm(f"{n_}{ax}", f"{col}{AX0 + k}")
     r = AX1 + 1; sym(r, "φNuo"); desc(r, "φ0 Nuo"); CA(f"E{r}", "=«phi0»*«Nuox»", "0", name="phiNuo"); U(f"G{r}", "kN")
 
     # ---- design moments, per axis
@@ -233,14 +257,14 @@ def build_tab(name, d):
             sgn = f"IF(ABS(N({T}))>=ABS(N({Bm})),IF(N({T})<0,-1,1),IF(N({Bm})<0,-1,1))"
             CA(f"K{rr}", f'=IF({blank},"",{sgn}*J{rr}*MAX(E{rr},{emin}))', "0.0")
         return h + 1
-    heading(ws, 90, "Design Moments – minimum eccentricity and moment magnification (braced)")
-    note(ws, 91, "M2* larger end moment; M1*/M2* negative in single curvature, −1 if M2* ≤ 0.05 D N*. Short if Le/r ≤ max(25, αc (38 − f'c/15)(1 + M1*/M2*)), αc from N*/(0.6 Nuo).")
-    note(ws, 92, "Nc = π²/Le² × 182 do φ0 Mc / (1 + βd), Mc = Mub.  δb = km / (1 − N*/Nc) ≥ 1, km = 0.6 − 0.4 M1*/M2* ≥ 0.4 (δb = 1 if short).  M*d = δb × max(M2*, 0.05 D N*).")
-    DX0 = dm_table(93, "x", "F", "G", "«Dx»", "«slx»", "«Lex»", "«Nuox»", "«Mubx»", "«dox»")
-    DY0 = dm_table(101, "y", "H", "I", "«Dy»", "«sly»", "«Ley»", "«Nuoy»", "«Muby»", "«doy»")
+    heading(ws, 102, "Design Moments – minimum eccentricity and moment magnification (braced)")
+    note(ws, 103, "M2* larger end moment; M1*/M2* negative in single curvature, −1 if M2* ≤ 0.05 D N*. Short if Le/r ≤ max(25, αc (38 − f'c/15)(1 + M1*/M2*)), αc from N*/(0.6 Nuo).")
+    note(ws, 104, "Nc = π²/Le² × 182 do φ0 Mc / (1 + βd), Mc = Mub.  δb = km / (1 − N*/Nc) ≥ 1, km = 0.6 − 0.4 M1*/M2* ≥ 0.4 (δb = 1 if short).  M*d = δb × max(M2*, 0.05 D N*).")
+    DX0 = dm_table(105, "x", "F", "G", "«Dx»", "«slx»", "«Lex»", "«Nuox»", "«Mubx»", "«dox»")
+    DY0 = dm_table(113, "y", "H", "I", "«Dy»", "«sly»", "«Ley»", "«Nuoy»", "«Muby»", "«doy»")
 
     # ---- capacity along the load direction (strain compatibility, biaxial)
-    CP = 110
+    CP = 122
     heading(ws, CP, "Capacity – strain compatibility along the load direction (OAR Concrete add-in)")
     note(ws, CP + 1, "OAR.CONCRETE.COLUMN: finds the neutral-axis direction θ for which the capacity (Mux, Muy) at N* points along (M*x,d, M*y,d); φ from Tbl 2.2.2 (φ0 … φb by N*/Nub).")
     h = CP + 2
@@ -488,16 +512,16 @@ def build_tab(name, d):
         top = ref.split(":")[0]; ws[top].value = ArrayFormula(ref, ws[top].value)
     def dvl(formula, ref):
         v = DataValidation(type="list", formula1=formula, allow_blank=True); ws.add_data_validation(v); v.add(ref)
-    dvl('"Rectangular,Circular"', "E29"); dvl('"Rectangular,Curvilinear,Parabolic"', "E33"); dvl('"Cl 10.6.4,Strain compatibility"', "E36")
-    dvl("=BarList", "E40:E41"); dvl("=BarList", f"G{CUS0}:G{CUS1}")
-    for ref, cond, labref in (("E31", "«CIRC»", "B31"), ("E43", "«CIRC»", "B43"), ("E36:F36", "«CIRC»", "B36")):
+    dvl('"Rectangular,Circular"', "E38"); dvl('"Rectangular,Curvilinear,Parabolic"', "E42"); dvl('"Cl 10.6.4,Strain compatibility"', "E45")
+    dvl("=BarList", "E49:E50"); dvl("=BarList", f"G{CUS0}:G{CUS1}")
+    for ref, cond, labref in (("E40", "«CIRC»", "B40"), ("E52", "«CIRC»", "B52"), ("E45:F45", "«CIRC»", "B45")):
         f = Fx(cond)
         ws.conditional_formatting.add(ref, FormulaRule(formula=[f], fill=PatternFill(bgColor=NA_FILL), font=Font(color=NA_FONT)))
         ws.conditional_formatting.add(labref, FormulaRule(formula=[f], font=Font(color=NA_FONT)))
     for rr in range(15, LAST + 1):
         if ws.row_dimensions[rr].height is None: ws.row_dimensions[rr].height = 14
     ws.print_area = f"A1:K{LAST}"
-    for b_ in (62, BX - 1, BS0 - 4): ws.row_breaks.append(Break(id=b_))
+    for b_ in (61, 101, CALC_END + 1, BS0 - 4): ws.row_breaks.append(Break(id=b_))
     return ws
 
 
