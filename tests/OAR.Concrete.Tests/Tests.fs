@@ -251,6 +251,9 @@ let main argv =
     check "Column  decompression M (dn = do), hand calc" mHand ax.Mud 1e-3
     check "Column  decompression point lies on the M-N curve" ax.Mud (Column.atTheta col c40 90.0 ax.Nud 0.6 duct).Mu 1e-3
     check "Column  phi at pure tension (Class N) = 0.85" 0.85 ax.PhiT 1e-12
+    let r0 = Column.atTheta col c40 90.0 0.0 0.6 duct
+    check "Column  bar strain at capacity = 0.003 (do - dn) / dn (N = 0)" (0.003 * (528.0 - r0.Dn) / r0.Dn) r0.EpsS 1e-12
+    check "Column  bar strain on the squash line: no tension (0)" 0.0 (Column.atTheta col c40 90.0 7000.0 0.6 duct).EpsS 1e-12
     // custom high-strength bar (threadbar 552 mm², fsy 950, Es 205 GPa) at the centre of the same section
     let tb = Section.barAt 552.0 300.0 950.0 150.0 205000.0
     let colT = Section.rectangle 300.0 600.0 (colBars @ [ tb ])

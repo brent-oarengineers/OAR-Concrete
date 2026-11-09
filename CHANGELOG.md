@@ -3,6 +3,11 @@
 Each version that reaches `main` is built, tested and published automatically as a GitHub Release.
 The calc sheet shows the version it was calculated with (under the green title bar).
 
+## v0.4.5
+- Column sheet: new check **εs ≤ εsu** – largest strain in the outermost tension bar at capacity (over the load cases)
+  against the fracture strain, Class N 5 % / Class L 1.5 % (AS/NZS 4671 uniform elongation; 1.5 % if any bar is Class L).
+  The capacity table shows εs for each case. `OAR.CONCRETE.COLUMN` spills a 10th value, εs.
+
 ## v0.4.4
 - Column sheet: custom bars can have their own yield strength and Es. The column Bars tab has an **Es** column and
   high-strength threadbar rows **TB26.5 – TB47** (950 MPa, Es 205 GPa – confirm with the supplier); add rows for any

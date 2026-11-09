@@ -10,7 +10,7 @@ open OAR.Concrete.Materials
 [<Literal>]
 let Category = "OAR Concrete"
 
-let private version = "0.4.4"
+let private version = "0.4.5"
 
 // ---------- conversion helpers (same as OAR Timber) ----------
 
@@ -257,7 +257,7 @@ let concreteBarLayout
         box out)
 
 [<ExcelFunction(Name = "OAR.CONCRETE.COLUMN",
-                Description = "Column capacity at N* along the direction of (M*x, M*y), strain compatibility (biaxial). Spills 9 values down: φ | Mu kNm | φMu kNm | Mux kNm | Muy kNm | θ deg | dn mm | Nub kN | Nuo kN",
+                Description = "Column capacity at N* along the direction of (M*x, M*y), strain compatibility (biaxial). Spills 10 values down: φ | Mu kNm | φMu kNm | Mux kNm | Muy kNm | θ deg | dn mm | Nub kN | Nuo kN | εs outermost tension bar",
                 Category = Category, IsThreadSafe = true)>]
 let concreteColumn
     ([<ExcelArgument(Name = "shape", Description = "Rect or Circle")>] shape: obj)
@@ -277,7 +277,7 @@ let concreteColumn
         let mx = defaultArg (numOpt "Mx" mxArg) 0.0
         let my = defaultArg (numOpt "My" myArg) 0.0
         let r = Column.biaxial sec c (num "N" nArg) mx my (defaultArg (numOpt "phi0" phi0Arg) 0.6) (ductOf classesArg)
-        column [ r.Phi; r.Mu; r.Phi * r.Mu; r.Mx; r.My; r.Theta; r.Dn; r.Nub; r.Nuo ])
+        column [ r.Phi; r.Mu; r.Phi * r.Mu; r.Mx; r.My; r.Theta; r.Dn; r.Nub; r.Nuo; r.EpsS ])
 
 [<ExcelFunction(Name = "OAR.CONCRETE.COLUMNAXIS",
                 Description = "Column properties for bending about one axis. Spills 11 values down: Nuo kN | Nuot kN | Nub kN | Mub kNm | Muo kNm | kuo | φb | do mm | Nud kN | Mud kNm | φ tension",
