@@ -239,6 +239,18 @@ let main argv =
     check "M-N grid  pure tension moment = 0 (symmetric bars)" 0.0 m0 1e-6
     let n6, m6, _ = mn.[6]
     check "M-N grid  N = 0 point = Muo" ax.Muo m6 1e-6
+    // decompression point (dn = do = 528): hand calc, rectangular block, bars at depths 72 / 300 / 528 (2 x N24 each)
+    // concrete 0.79 x 40 x 300 x 0.87 x 528 less displaced concrete at the two bar rows inside the block
+    let ab = 450.0
+    let fsTop = 500.0
+    let fsMid = min 500.0 (200000.0 * 0.003 * (1.0 - 300.0 / 528.0))
+    let cc = 0.79 * 40.0 * 300.0 * 0.87 * 528.0
+    let nHand = (cc + 2.0 * ab * (fsTop - 0.79 * 40.0) + 2.0 * ab * (fsMid - 0.79 * 40.0)) / 1000.0
+    let mHand = (cc * (300.0 - 0.87 * 528.0 / 2.0) + 2.0 * ab * (fsTop - 0.79 * 40.0) * 228.0) / 1e6
+    check "Column  decompression N (dn = do), hand calc" nHand ax.Nud 1e-3
+    check "Column  decompression M (dn = do), hand calc" mHand ax.Mud 1e-3
+    check "Column  decompression point lies on the M-N curve" ax.Mud (Column.atTheta col c40 90.0 ax.Nud 0.6 duct).Mu 1e-3
+    check "Column  phi at pure tension (Class N) = 0.85" 0.85 ax.PhiT 1e-12
     let ct = Column.contour col c40 1993.6 36 0.6 duct
     check "Contour  closed (first = last)" ct.Head.Mx (List.last ct).Mx 1e-9
     check "Contour  theta 90 point = Mx capacity" 587.311 ct.Head.Mx 3e-3

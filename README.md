@@ -168,6 +168,8 @@ Tabs C1 (rectangular example, Brent's previous RC_Column sheet) and C2 (Ø600 pi
 - **Cl 10.6.4** interaction (αn = 0.7 + 1.7 N*/(0.6Nuo), 1 ≤ αn ≤ 2) is shown for every case; for rectangular sections the
   *Biaxial check governing* input picks it or strain compatibility for the check. Circular sections always use strain
   compatibility (any direction is a principal axis).
+- **Key points** (page 1): φN and φM about each axis at squash, decompression (dn = do), balanced, pure bending and
+  pure tension.
 - **Charts**: M–N for each axis (φ and unfactored) with the design actions, the moment contour at N* of a chosen case,
   and the section with its bars.
 
