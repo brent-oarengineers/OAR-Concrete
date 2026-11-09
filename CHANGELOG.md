@@ -3,6 +3,10 @@
 Each version that reaches `main` is built, tested and published automatically as a GitHub Release.
 The calc sheet shows the version it was calculated with (under the green title bar).
 
+## v0.4.3
+- Column Bar Schedule: the 10 custom bar rows (C1–C10, input cells) now sit at the top, above the calculated typical
+  layout, so typing into the add-in array ("You can't change part of an array") no longer happens by accident.
+
 ## v0.4.2
 - Column sheet: new **Interaction Curve – Key Points** table on page 1 (φN and φM about each axis at squash, decompression,
   balanced, pure bending and pure tension, with φ at each point). Load cases now start page 2.
