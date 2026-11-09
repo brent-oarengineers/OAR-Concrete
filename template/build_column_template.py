@@ -17,6 +17,9 @@ from openpyxl.worksheet.formula import ArrayFormula
 from openpyxl.chart import ScatterChart, Reference, Series
 from openpyxl.chart.shapes import GraphicalProperties
 from openpyxl.drawing.line import LineProperties
+from openpyxl.chart.axis import ChartLines
+from openpyxl.chart.text import RichText
+from openpyxl.drawing.text import Paragraph, ParagraphProperties, CharacterProperties, RichTextProperties
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
@@ -291,7 +294,6 @@ def build_tab(name, d):
     # ================================================================== CHARTS (page 3) and helper data (columns M onward, not printed)
     CH = CALC_END + 2
     heading(ws, CH, "Interaction Diagrams")
-    note(ws, CH + 1, "M–N curves for each axis (φ-factored and unfactored) with the design actions; biaxial moment contour at N* of the selected case; section and bars.")
     HR = 300  # helper rows start (below everything, outside the print area)
     lab(f"M{HR - 1}", "Chart data (not printed)", sz=7, color=GREY, i=True)
     # M–N curves: 40 rows x 5 (N, M, φ, φN, φM)
@@ -417,47 +419,68 @@ def build_tab(name, d):
     status_cf(ws, f"J{CHK0}:K{CHK1}"); util_cf(ws, f"I{CHK0}:I{CHK1}", f"I{CHK0}")
 
     # ================================================================== charts
-    def line_series(xref, yref, title, color, width=19050, dash=None, marker=False):
-        s = Series(yref, xref, title=title)
-        s.graphicalProperties.line = LineProperties(solidFill=color, w=width, prstDash=dash)
-        s.smooth = False
-        s.marker.symbol = "none"
+    # Plain engineering plots: no chart title or legend (caption in the cell above), thin lines,
+    # light major and minor gridlines, axes at the left / bottom, square border.
+    BLUE, ORANGE, DOT = "4472C4", "ED7D31", "FF0000"
+    def thin(color, w=9525): return GraphicalProperties(ln=LineProperties(solidFill=color, w=w))
+    def tick_font(sz=800):
+        return RichText(bodyPr=RichTextProperties(), p=[Paragraph(pPr=ParagraphProperties(defRPr=CharacterProperties(sz=sz, solidFill="404040")), endParaRPr=CharacterProperties())])
+    def line_series(xref, yref, color, width=15875, marker=False):
+        s = Series(yref, xref); s.smooth = False
         if marker:
-            s.marker.symbol = "circle"; s.marker.size = 6
+            s.marker.symbol = "circle"; s.marker.size = 5
             s.marker.graphicalProperties = GraphicalProperties(solidFill=color, ln=LineProperties(solidFill=color))
             s.graphicalProperties.line = LineProperties(noFill=True)
+        else:
+            s.marker.symbol = "none"
+            s.graphicalProperties.line = LineProperties(solidFill=color, w=width)
         return s
-    def chart(title, xt, yt, w=9.6, h=7.2):
-        c = ScatterChart(); c.title = title; c.style = 2; c.height = h; c.width = w
-        c.x_axis.title = xt; c.y_axis.title = yt; c.legend.position = "b"
-        c.x_axis.delete = False; c.y_axis.delete = False
-        c.x_axis.majorGridlines = None
+    def chart(xmin=None, w=9.6, h=6.9):
+        c = ScatterChart(); c.style = 2; c.height = h; c.width = w
+        c.title = None; c.legend = None; c.roundedCorners = False
+        c.graphical_properties = GraphicalProperties(ln=LineProperties(solidFill="000000", w=9525))
+        for a in (c.x_axis, c.y_axis):
+            a.delete = False; a.title = None
+            a.majorGridlines = ChartLines(spPr=thin("D9D9D9"))
+            a.minorGridlines = ChartLines(spPr=thin("F2F2F2"))
+            a.spPr = thin("808080"); a.txPr = tick_font()
+            a.crosses = "min"; a.tickLblPos = "low"
+            a.majorTickMark = "none"; a.minorTickMark = "none"
+            a.number_format = "General"
+        if xmin is not None: c.x_axis.scaling.min = xmin
         return c
-    for ax, col, anchor in (("x", "M", f"B{CH + 2}"), ("y", "S", f"G{CH + 2}")):
+    def caption(cell, text):
+        ws[cell] = text; ws[cell].font = font(9, b=True, color=GREEN)
+    note(ws, CH + 1, "Blue = unfactored capacity, orange = φ capacity, red = design actions. Contour at N* of the case selected in the inputs.")
+    for ax, col, cap, anchor in (("x", "M", "B", "B"), ("y", "S", "G", "G")):
         cN = col; cM = chr(ord(col) + 1); cPN = chr(ord(col) + 3); cPM = chr(ord(col) + 4)
-        ch = chart(f"M–N, bending about {ax}", f"M{ax} (kNm)", "N (kN)")
-        ch.series.append(line_series(Reference(ws, range_string=f"'{name}'!${cPM}${HR + 1}:${cPM}${HR + 40}"),
-                                     Reference(ws, range_string=f"'{name}'!${cPN}${HR + 1}:${cPN}${HR + 40}"), "φ capacity", GREEN))
+        caption(f"{cap}{CH + 2}", f"M–N about {ax}:  N (kN) vs M{ax} (kNm)")
+        ch = chart(xmin=0)
         ch.series.append(line_series(Reference(ws, range_string=f"'{name}'!${cM}${HR + 1}:${cM}${HR + 40}"),
-                                     Reference(ws, range_string=f"'{name}'!${cN}${HR + 1}:${cN}${HR + 40}"), "unfactored", "A6A6A6", 12700, "dash"))
+                                     Reference(ws, range_string=f"'{name}'!${cN}${HR + 1}:${cN}${HR + 40}"), BLUE))
+        ch.series.append(line_series(Reference(ws, range_string=f"'{name}'!${cPM}${HR + 1}:${cPM}${HR + 40}"),
+                                     Reference(ws, range_string=f"'{name}'!${cPN}${HR + 1}:${cPN}${HR + 40}"), ORANGE))
         lx, ly = ("Y", "Z") if ax == "x" else ("AA", "AB")
         ch.series.append(line_series(Reference(ws, range_string=f"'{name}'!${lx}${HR + 1}:${lx}${HR + NLC}"),
-                                     Reference(ws, range_string=f"'{name}'!${ly}${HR + 1}:${ly}${HR + NLC}"), "design actions", RED, marker=True))
-        ws.add_chart(ch, anchor)
-    ch = chart("Moment contour at N*", "Mx (kNm)", "My (kNm)")
-    ch.series.append(line_series(Reference(ws, range_string=f"'{name}'!$AF${HR + 1}:$AF${HR + 37}"),
-                                 Reference(ws, range_string=f"'{name}'!$AG${HR + 1}:$AG${HR + 37}"), "φ capacity", GREEN))
+                                     Reference(ws, range_string=f"'{name}'!${ly}${HR + 1}:${ly}${HR + NLC}"), DOT, marker=True))
+        ws.add_chart(ch, f"{anchor}{CH + 3}")
+    caption(f"B{CH + 18}", "Moment contour at N*:  My vs Mx (kNm)")
+    ch = chart()
     ch.series.append(line_series(Reference(ws, range_string=f"'{name}'!$AD${HR + 1}:$AD${HR + 37}"),
-                                 Reference(ws, range_string=f"'{name}'!$AE${HR + 1}:$AE${HR + 37}"), "unfactored", "A6A6A6", 12700, "dash"))
+                                 Reference(ws, range_string=f"'{name}'!$AE${HR + 1}:$AE${HR + 37}"), BLUE))
+    ch.series.append(line_series(Reference(ws, range_string=f"'{name}'!$AF${HR + 1}:$AF${HR + 37}"),
+                                 Reference(ws, range_string=f"'{name}'!$AG${HR + 1}:$AG${HR + 37}"), ORANGE))
     ch.series.append(line_series(Reference(ws, range_string=f"'{name}'!$AI${HR + 1}:$AI${HR + 1}"),
-                                 Reference(ws, range_string=f"'{name}'!$AJ${HR + 1}:$AJ${HR + 1}"), "design actions", RED, marker=True))
-    ws.add_chart(ch, f"B{CH + 18}")
-    ch = chart("Section (mm from centre)", "x (mm)", "y (mm)")
+                                 Reference(ws, range_string=f"'{name}'!$AJ${HR + 1}:$AJ${HR + 1}"), DOT, marker=True))
+    ws.add_chart(ch, f"B{CH + 19}")
+    caption(f"G{CH + 18}", "Section:  y vs x (mm from centre)")
+    ch = chart()
     ch.series.append(line_series(Reference(ws, range_string=f"'{name}'!$AL${HR + 1}:$AL${HR + 73}"),
-                                 Reference(ws, range_string=f"'{name}'!$AM${HR + 1}:$AM${HR + 73}"), "outline", "404040"))
+                                 Reference(ws, range_string=f"'{name}'!$AM${HR + 1}:$AM${HR + 73}"), "404040"))
     ch.series.append(line_series(Reference(ws, range_string=f"'{name}'!$Q${TYP0}:$Q${CUS1}"),
-                                 Reference(ws, range_string=f"'{name}'!$R${TYP0}:$R${CUS1}"), "bars", GREEN, marker=True))
-    ws.add_chart(ch, f"G{CH + 18}")
+                                 Reference(ws, range_string=f"'{name}'!$R${TYP0}:$R${CUS1}"), GREEN, marker=True))
+    ch.series[-1].marker.size = 6
+    ws.add_chart(ch, f"G{CH + 19}")
 
     # ================================================================== resolve, arrays, validation, grey-outs, print
     for ref, f in pend: ws[ref].value = Fx(f)

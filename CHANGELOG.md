@@ -3,6 +3,11 @@
 Each version that reaches `main` is built, tested and published automatically as a GitHub Release.
 The calc sheet shows the version it was calculated with (under the green title bar).
 
+## v0.4.1
+- Column sheet charts cleaned up: no chart titles or legends (caption above each chart, colour key in the note),
+  thin blue / orange lines, light major and minor gridlines, axes at the left and bottom, square border.
+- The flexural and column templates are attached to each release as separate downloads.
+
 ## v0.4.0
 - **New template: OAR - RC Column Design.xlsx** – rectangular and circular columns to AS 3600-2018: typical perimeter
   bar layout plus custom bars, braced slenderness (Cl 10.3 – 10.5), biaxial capacity by strain compatibility along the
