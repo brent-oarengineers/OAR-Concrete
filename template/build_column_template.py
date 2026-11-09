@@ -36,29 +36,36 @@ wb = Workbook()
 wb.remove(wb.active)
 
 # =========================== DATA TAB: Bars ===========================
+# Column template: Bars table carries Es, plus high-strength threadbar for shoring / piling custom bars
+TB_ES = 205000
+COL_BARS = [r + [200000] for r in BARS] + [[f"TB{d_}", d_n, a_, 950, "N", TB_ES] for d_, d_n, a_ in
+                                            (("26.5", 26.5, 552), ("32", 32, 804), ("36", 36, 1018), ("40", 40, 1257), ("47", 47, 1735))]
+COL_NOTES = dict(BAR_NOTES)
+COL_NOTES["TB26.5"] = "threadbar 950/1050 (e.g. DYWIDAG) – confirm fsy, Es, area with the supplier"
 D_ = wb.create_sheet("Bars")
 setup_data_tab(D_, "Reinforcement – bar properties",
-               "AS/NZS 4671 nominal values. S = 250 MPa deformed (D250N), R = plain round, L = mesh wire (Class L). Edit or add rows; the calc tabs read this list.",
-               {"B": 10, "C": 10, "D": 10, "E": 10, "F": 10, "G": 40})
-for j, t in enumerate(["Bar", "db (mm)", "Ab (mm²)", "fsy (MPa)", "Class", "Note"]):
+               "AS/NZS 4671 nominal values. S = 250 MPa deformed (D250N), R = plain round, L = mesh wire (Class L), TB = high-strength threadbar. Edit or add rows (any fsy, Es); the calc tabs read this list.",
+               {"B": 10, "C": 10, "D": 10, "E": 10, "F": 10, "G": 10, "H": 44})
+for j, t in enumerate(["Bar", "db (mm)", "Ab (mm²)", "fsy (MPa)", "Class", "Es (MPa)", "Note"]):
     c = D_.cell(4, 2 + j); c.value = t; c.font = font(8, True); c.fill = fill(HDR_FILL); c.border = BOX; c.alignment = CEN
-BAR0 = 5; BAR_LAST = BAR0 + len(BARS) + 5
+BAR0 = 5; BAR_LAST = BAR0 + len(COL_BARS) + 5
 for i in range(BAR_LAST - BAR0 + 1):
-    row = BARS[i] + [BAR_NOTES.get(BARS[i][0], "")] if i < len(BARS) else [None] * 6
+    row = COL_BARS[i] + [COL_NOTES.get(COL_BARS[i][0], "")] if i < len(COL_BARS) else [None] * 7
     for j, v in enumerate(row):
         c = D_.cell(BAR0 + i, 2 + j); c.value = v; c.font = font(8, color="000000"); c.fill = fill(IN_FILL); c.border = BOX
-        c.alignment = LEFT if j in (0, 5) else CEN
+        c.alignment = LEFT if j in (0, 6) else CEN
+EC_C = 11  # f'c / Ec table in K:L
 for j, t in enumerate(["f'c (MPa)", "Ec (MPa)"]):
-    c = D_.cell(4, 9 + j); c.value = t; c.font = font(8, True); c.fill = fill(HDR_FILL); c.border = BOX; c.alignment = CEN
+    c = D_.cell(4, EC_C + j); c.value = t; c.font = font(8, True); c.fill = fill(HDR_FILL); c.border = BOX; c.alignment = CEN
 for i, (fc_, ec_) in enumerate(zip([20, 25, 32, 40, 50, 65, 80, 100], [24000, 26700, 30100, 32800, 34800, 37400, 39600, 42200])):
     for j, v in enumerate((fc_, ec_)):
-        c = D_.cell(5 + i, 9 + j); c.value = v; c.font = font(8, color="000000"); c.fill = fill(IN_FILL); c.border = BOX; c.alignment = CEN
-c = D_.cell(13, 9); c.value = "AS 3600 Table 3.1.2 (ρ = 2400 kg/m³); calc tabs interpolate linearly."; c.font = font(7, i=True, color=GREY)
-D_.column_dimensions["H"].width = 3; D_.column_dimensions["I"].width = 10; D_.column_dimensions["J"].width = 10
+        c = D_.cell(5 + i, EC_C + j); c.value = v; c.font = font(8, color="000000"); c.fill = fill(IN_FILL); c.border = BOX; c.alignment = CEN
+c = D_.cell(13, EC_C); c.value = "AS 3600 Table 3.1.2 (ρ = 2400 kg/m³); calc tabs interpolate linearly."; c.font = font(7, i=True, color=GREY)
+D_.column_dimensions["I"].width = 3; D_.column_dimensions["J"].width = 3; D_.column_dimensions["K"].width = 10; D_.column_dimensions["L"].width = 10
 wb.defined_names["BarList"] = DefinedName("BarList", attr_text=f"Bars!$B${BAR0}:$B${BAR_LAST}")
-wb.defined_names["EcFc"] = DefinedName("EcFc", attr_text="Bars!$I$5:$I$12")
-wb.defined_names["EcVal"] = DefinedName("EcVal", attr_text="Bars!$J$5:$J$12")
-BARTAB = f"Bars!$B${BAR0}:$F${BAR_LAST}"
+wb.defined_names["EcFc"] = DefinedName("EcFc", attr_text="Bars!$K$5:$K$12")
+wb.defined_names["EcVal"] = DefinedName("EcVal", attr_text="Bars!$L$5:$L$12")
+BARTAB = f"Bars!$B${BAR0}:$G${BAR_LAST}"
 def barv(ref, col): return f"VLOOKUP({ref},{BARTAB},{col},FALSE)"
 
 NLC = 6          # load cases
@@ -191,7 +198,7 @@ def build_tab(name, d):
     CUS0, CUS1 = BS0 + 1, BS0 + NCUS
     TYP0, TYP1 = CUS1 + 1, CUS1 + NTYP
     RS0, RS1 = CUS0, TYP1
-    BARS_ARG = f"$L${RS0}:$O${RS1}"
+    BARS_ARG = f"$L${RS0}:$P${RS1}"
     CLS_ARG = f"$J${RS0}:$J${RS1}"
     SEC = '«SHAPE»,«b»:«D»'
     MOD = '«fc»,«model»'
@@ -357,11 +364,11 @@ def build_tab(name, d):
 
     # ================================================================== BAR SCHEDULE (last page)
     heading(ws, BS0 - 3, "Bar Schedule")
-    note(ws, BS0 - 2, "Custom bars C1–C10: enter x, y (mm from the section centre) and bar – added to the typical layout. Typical rows are calculated by OAR.CONCRETE.BARLAYOUT (do not edit).")
+    note(ws, BS0 - 2, "Custom bars C1–C10: enter x, y (mm from the centre) and bar – any bar on the Bars tab (e.g. TB threadbar, or add a row with its own fsy and Es). Typical rows: OAR.CONCRETE.BARLAYOUT (do not edit).")
     table_header(ws, BS0 - 1, [(f"B{BS0 - 1}:C{BS0 - 1}", "#"), (f"D{BS0 - 1}", "Source"), (f"E{BS0 - 1}", "x (mm)"), (f"F{BS0 - 1}", "y (mm)"),
-                               (f"G{BS0 - 1}", "Bar"), (f"H{BS0 - 1}", "As (mm²)"), (f"I{BS0 - 1}", "fsy (MPa)"), (f"J{BS0 - 1}:K{BS0 - 1}", "Class")])
+                               (f"G{BS0 - 1}", "Bar"), (f"H{BS0 - 1}", "As (mm²)"), (f"I{BS0 - 1}", "fsy (MPa)"), (f"J{BS0 - 1}", "Class"), (f"K{BS0 - 1}", "Es (GPa)")])
     ws.row_dimensions[BS0].height = 6
-    lab(f"L{BS0 - 1}", "engine: As | depth | fsy | x from left", sz=7, color=GREY)
+    lab(f"L{BS0 - 1}", "engine: As | depth | fsy | x from left | Es", sz=7, color=GREY)
     for k in range(NCUS + NTYP):
         rr = CUS0 + k; typ = k >= NCUS
         ws.merge_cells(f"B{rr}:C{rr}"); ws[f"B{rr}"].value = (k - NCUS + 1) if typ else f"C{k + 1}"
@@ -376,10 +383,11 @@ def build_tab(name, d):
             IN(f"E{rr}", c[0], "0.0"); IN(f"F{rr}", c[1], "0.0"); IN(f"G{rr}", c[2])
         CA(f"H{rr}", f'=IF(OR(G{rr}="",G{rr}="None"),"",{barv(f"G{rr}", 3)})', "0")
         CA(f"I{rr}", f'=IF(H{rr}="","",{barv(f"G{rr}", 4)})', "0")
-        CA(f"J{rr}:K{rr}", f'=IF(H{rr}="","",{barv(f"G{rr}", 5)})')
+        CA(f"J{rr}", f'=IF(H{rr}="","",{barv(f"G{rr}", 5)})')
+        CA(f"K{rr}", f'=IF(H{rr}="","",IFERROR({barv(f"G{rr}", 6)}/1000,200))', "0")
         # engine columns
         for col, f in (("L", f"=N(H{rr})"), ("M", f'=IF(L{rr}=0,"",IF(«CIRC»,«b»,«D»)/2-F{rr})'),
-                       ("N", f'=IF(L{rr}=0,"",I{rr})'), ("O", f'=IF(L{rr}=0,"",«b»/2+E{rr})'),
+                       ("N", f'=IF(L{rr}=0,"",I{rr})'), ("O", f'=IF(L{rr}=0,"",«b»/2+E{rr})'), ("P", f'=IF(L{rr}=0,"",K{rr}*1000)'),
                        ("Q", f'=IF(L{rr}=0,NA(),E{rr})'), ("R", f'=IF(L{rr}=0,NA(),F{rr})')):
             pend.append((f"{col}{rr}", f)); ws[f"{col}{rr}"].font = font(7, color=GREY)
     pend.append((f"E{TYP0}", f'=IF(OR(«bar»="",«bar»="None"),"",OAR.CONCRETE.BARLAYOUT({SEC},«edge»,«n1»,«n2»,{NTYP}))'))

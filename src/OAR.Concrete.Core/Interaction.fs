@@ -38,7 +38,7 @@ let curve (sec: Section) (c: Concrete) (thetaDeg: float) (nPoints: int) (phi0: f
     // ends
     let nuot = -(sec.Bars |> List.sumBy (fun b -> b.Area * b.Steel.Fsy)) / 1000.0
     let mTension = -(sec.Bars |> List.sumBy (fun b -> b.Area * b.Steel.Fsy * (sOf d { X = b.X; Y = b.Y } - sRef))) / 1e6
-    let nuo = Design.squash c.Fc (gross sec).A (sec.Bars |> List.map (fun b -> b.Area, b.Steel.Fsy)) / 1000.0
+    let nuo = Design.squash c.Fc (gross sec).A (sec.Bars |> List.map (fun b -> b.Area, min b.Steel.Fsy (b.Steel.Es * EpsCu))) / 1000.0
     let phiFor n =
         if n >= 0.0 then Design.phiCompression phi0 phiB n nub
         else Design.phiTension ductility phiB n nuot

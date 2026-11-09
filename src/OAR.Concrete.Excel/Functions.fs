@@ -10,7 +10,7 @@ open OAR.Concrete.Materials
 [<Literal>]
 let Category = "OAR Concrete"
 
-let private version = "0.4.3"
+let private version = "0.4.4"
 
 // ---------- conversion helpers (same as OAR Timber) ----------
 
@@ -262,7 +262,7 @@ let concreteBarLayout
 let concreteColumn
     ([<ExcelArgument(Name = "shape", Description = "Rect or Circle")>] shape: obj)
     ([<ExcelArgument(Name = "dims", Description = "Rect: b, D (mm). Circle: D (mm)")>] dims: obj)
-    ([<ExcelArgument(Name = "bars", Description = "Rows: As mm² | depth from top mm | fsy MPa | x from left mm")>] bars: obj)
+    ([<ExcelArgument(Name = "bars", Description = "Rows: As mm² | depth from top mm | fsy MPa | x from left mm | [Es MPa]")>] bars: obj)
     ([<ExcelArgument(Name = "fc", Description = "f'c, MPa")>] fc: obj)
     ([<ExcelArgument(Name = "model", Description = "Rectangular, Curvilinear or Parabolic")>] model: obj)
     ([<ExcelArgument(Name = "N", Description = "N*, kN (compression +)")>] nArg: obj)
@@ -285,7 +285,7 @@ let concreteColumn
 let concreteColumnAxis
     ([<ExcelArgument(Name = "shape", Description = "Rect or Circle")>] shape: obj)
     ([<ExcelArgument(Name = "dims", Description = "Rect: b, D (mm). Circle: D (mm)")>] dims: obj)
-    ([<ExcelArgument(Name = "bars", Description = "Rows: As mm² | depth from top mm | fsy MPa | x from left mm")>] bars: obj)
+    ([<ExcelArgument(Name = "bars", Description = "Rows: As mm² | depth from top mm | fsy MPa | x from left mm | [Es MPa]")>] bars: obj)
     ([<ExcelArgument(Name = "fc", Description = "f'c, MPa")>] fc: obj)
     ([<ExcelArgument(Name = "model", Description = "Rectangular, Curvilinear or Parabolic")>] model: obj)
     ([<ExcelArgument(Name = "axis", Description = "x (Mx, top face in compression) or y (My, +x face in compression)")>] axisArg: obj)
@@ -303,7 +303,7 @@ let concreteColumnAxis
 let concreteMnColumn
     ([<ExcelArgument(Name = "shape", Description = "Rect or Circle")>] shape: obj)
     ([<ExcelArgument(Name = "dims", Description = "Rect: b, D (mm). Circle: D (mm)")>] dims: obj)
-    ([<ExcelArgument(Name = "bars", Description = "Rows: As mm² | depth from top mm | fsy MPa | x from left mm")>] bars: obj)
+    ([<ExcelArgument(Name = "bars", Description = "Rows: As mm² | depth from top mm | fsy MPa | x from left mm | [Es MPa]")>] bars: obj)
     ([<ExcelArgument(Name = "fc", Description = "f'c, MPa")>] fc: obj)
     ([<ExcelArgument(Name = "model", Description = "Rectangular, Curvilinear or Parabolic")>] model: obj)
     ([<ExcelArgument(Name = "axis", Description = "x or y")>] axisArg: obj)
@@ -323,7 +323,7 @@ let concreteMnColumn
 let concreteMContour
     ([<ExcelArgument(Name = "shape", Description = "Rect or Circle")>] shape: obj)
     ([<ExcelArgument(Name = "dims", Description = "Rect: b, D (mm). Circle: D (mm)")>] dims: obj)
-    ([<ExcelArgument(Name = "bars", Description = "Rows: As mm² | depth from top mm | fsy MPa | x from left mm")>] bars: obj)
+    ([<ExcelArgument(Name = "bars", Description = "Rows: As mm² | depth from top mm | fsy MPa | x from left mm | [Es MPa]")>] bars: obj)
     ([<ExcelArgument(Name = "fc", Description = "f'c, MPa")>] fc: obj)
     ([<ExcelArgument(Name = "model", Description = "Rectangular, Curvilinear or Parabolic")>] model: obj)
     ([<ExcelArgument(Name = "N", Description = "Axial force, kN (compression +)")>] nArg: obj)

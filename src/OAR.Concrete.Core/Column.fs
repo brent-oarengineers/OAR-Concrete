@@ -72,7 +72,7 @@ let axisProps (sec: Section) (c: Concrete) (thetaDeg: float) (duct: Design.Ducti
     let dec = Ultimate.evaluate sec c thetaDeg bend.Do DefaultStrips
     let nuot = -(sec.Bars |> List.sumBy (fun b -> b.Area * b.Steel.Fsy)) / 1000.0
     let phiB = Design.phiBending duct bend.Kuo
-    { Nuo = Design.squash c.Fc (gross sec).A (sec.Bars |> List.map (fun b -> b.Area, b.Steel.Fsy)) / 1000.0
+    { Nuo = Design.squash c.Fc (gross sec).A (sec.Bars |> List.map (fun b -> b.Area, min b.Steel.Fsy (b.Steel.Es * EpsCu))) / 1000.0
       Nuot = nuot
       Nub = bal.N / 1000.0
       Mub = bal.Mu / 1e6
