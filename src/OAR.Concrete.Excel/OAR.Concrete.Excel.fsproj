@@ -3,13 +3,19 @@
   <PropertyGroup>
     <!-- .NET Framework 4.8 is built into Windows 10/11, so users need nothing but the .xll -->
     <TargetFramework>net48</TargetFramework>
-    <Version>0.4.5</Version>
+    <Version>0.5.0</Version>
     <!-- copy FSharp.Core.dll next to the add-in so the .dna can pack it -->
     <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
   </PropertyGroup>
 
   <ItemGroup>
     <Compile Include="Functions.fs" />
+    <Compile Include="Ribbon.fs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- message boxes for the ribbon export command -->
+    <Reference Include="System.Windows.Forms" />
   </ItemGroup>
 
   <ItemGroup>

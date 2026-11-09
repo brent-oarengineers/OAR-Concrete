@@ -3,6 +3,13 @@
 Each version that reaches `main` is built, tested and published automatically as a GitHub Release.
 The calc sheet shows the version it was calculated with (under the green title bar).
 
+## v0.5.0
+- New **OAR** ribbon tab with **Export calcs to PDF**: exports every visible calc tab (OAR green tab colour 465A52)
+  in tab order into one PDF, using each tab's print area and page setup. Data tabs (other colours) and hidden tabs are
+  skipped. Defaults to "<workbook name> - Calcs.pdf" next to the workbook and opens the PDF when done.
+  Works in any OAR calc workbook, not just the concrete templates. The tab is shared (idQ `oar:OarTab`) so OAR Steel /
+  OAR Timber can add groups to the same tab later.
+
 ## v0.4.5
 - Column sheet: new check **εs ≤ εsu** – largest strain in the outermost tension bar at capacity (over the load cases)
   against the fracture strain, Class N 5 % / Class L 1.5 % (AS/NZS 4671 uniform elongation; 1.5 % if any bar is Class L).
