@@ -251,6 +251,17 @@ let main argv =
     check "Column  decompression M (dn = do), hand calc" mHand ax.Mud 1e-3
     check "Column  decompression point lies on the M-N curve" ax.Mud (Column.atTheta col c40 90.0 ax.Nud 0.6 duct).Mu 1e-3
     check "Column  phi at pure tension (Class N) = 0.85" 0.85 ax.PhiT 1e-12
+    let r0 = Column.atTheta col c40 90.0 0.0 0.6 duct
+    check "Column  bar strain at capacity = 0.003 (do - dn) / dn (N = 0)" (0.003 * (528.0 - r0.Dn) / r0.Dn) r0.EpsS 1e-12
+    check "Column  bar strain on the squash line: no tension (0)" 0.0 (Column.atTheta col c40 90.0 7000.0 0.6 duct).EpsS 1e-12
+    // custom high-strength bar (threadbar 552 mm², fsy 950, Es 205 GPa) at the centre of the same section
+    let tb = Section.barAt 552.0 300.0 950.0 150.0 205000.0
+    let colT = Section.rectangle 300.0 600.0 (colBars @ [ tb ])
+    let axT = Column.axisProps colT c40 90.0 duct
+    check "Threadbar  squash: bar stress capped at Es x 0.003 = 615 MPa" (ax.Nuo + 552.0 * (615.0 - alpha1 40.0 * 40.0) / 1000.0) axT.Nuo 1e-6
+    let sT = 205000.0 * 0.003 * (1.0 - 300.0 / 528.0)
+    check "Threadbar  decompression: bar at 266 MPa by strain, not 950" (ax.Nud + 552.0 * (sT - 0.79 * 40.0) / 1000.0) axT.Nud 1e-3
+    check "Threadbar  pure tension: all bars yield (950 MPa)" (ax.Nuot - 552.0 * 950.0 / 1000.0) axT.Nuot 1e-9
     let ct = Column.contour col c40 1993.6 36 0.6 duct
     check "Contour  closed (first = last)" ct.Head.Mx (List.last ct).Mx 1e-9
     check "Contour  theta 90 point = Mx capacity" 587.311 ct.Head.Mx 3e-3

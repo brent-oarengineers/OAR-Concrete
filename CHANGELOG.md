@@ -3,6 +3,19 @@
 Each version that reaches `main` is built, tested and published automatically as a GitHub Release.
 The calc sheet shows the version it was calculated with (under the green title bar).
 
+## v0.4.5
+- Column sheet: new check **εs ≤ εsu** – largest strain in the outermost tension bar at capacity (over the load cases)
+  against the fracture strain, Class N 5 % / Class L 1.5 % (AS/NZS 4671 uniform elongation; 1.5 % if any bar is Class L).
+  The capacity table shows εs for each case. `OAR.CONCRETE.COLUMN` spills a 10th value, εs.
+
+## v0.4.4
+- Column sheet: custom bars can have their own yield strength and Es. The column Bars tab has an **Es** column and
+  high-strength threadbar rows **TB26.5 – TB47** (950 MPa, Es 205 GPa – confirm with the supplier); add rows for any
+  other bar. The Bar Schedule shows Es and passes it to the add-in.
+- Every bar's stress comes from its own strain (elastic – perfectly plastic, own fsy and Es), so a central threadbar only
+  reaches 950 MPa where the strain allows. At the squash load each bar is limited to min(fsy, Es εcu)
+  (615 MPa for threadbar; no change for 500 MPa bars).
+
 ## v0.4.3
 - Column Bar Schedule: the 10 custom bar rows (C1–C10, input cells) now sit at the top, above the calculated typical
   layout, so typing into the add-in array ("You can't change part of an array") no longer happens by accident.

@@ -72,7 +72,7 @@ let axisProps (sec: Section) (c: Concrete) (thetaDeg: float) (duct: Design.Ducti
     let dec = Ultimate.evaluate sec c thetaDeg bend.Do DefaultStrips
     let nuot = -(sec.Bars |> List.sumBy (fun b -> b.Area * b.Steel.Fsy)) / 1000.0
     let phiB = Design.phiBending duct bend.Kuo
-    { Nuo = Design.squash c.Fc (gross sec).A (sec.Bars |> List.map (fun b -> b.Area, b.Steel.Fsy)) / 1000.0
+    { Nuo = Design.squash c.Fc (gross sec).A (sec.Bars |> List.map (fun b -> b.Area, min b.Steel.Fsy (b.Steel.Es * EpsCu))) / 1000.0
       Nuot = nuot
       Nub = bal.N / 1000.0
       Mub = bal.Mu / 1e6
@@ -101,7 +101,10 @@ type Capacity =
       Mu: float
       Phi: float
       Nub: float
-      Nuo: float }
+      Nuo: float
+      /// strain in the outermost tension bar at capacity (tension +; 0 if no bar in tension;
+      /// NaN near pure tension, where the concrete no longer reaches εcu)
+      EpsS: float }
 
 /// Capacity at axial force nKN with maximum compression in direction θ.
 /// Above the strain-compatibility point with dn = depth / γ, the capacity runs in a straight line
@@ -124,7 +127,7 @@ let atThetaAx (sec: Section) (c: Concrete) (ax: AxisProps) (thetaDeg: float) (nK
         let mx = tx + k * (lo.Mx / 1e6 - tx)
         let my = ty + k * (lo.My / 1e6 - ty)
         { Theta = thetaDeg; Dn = nan; N = nKN; Mx = mx; My = my; Mu = sqrt (mx * mx + my * my)
-          Phi = phi; Nub = ax.Nub; Nuo = ax.Nuo }
+          Phi = phi; Nub = ax.Nub; Nuo = ax.Nuo; EpsS = nan }
     else
     let dnLim = h / gamma c.Fc
     let lim = Ultimate.evaluate sec c thetaDeg dnLim DefaultStrips
@@ -133,13 +136,13 @@ let atThetaAx (sec: Section) (c: Concrete) (ax: AxisProps) (thetaDeg: float) (nK
         let k = (ax.Nuo - nKN) / (ax.Nuo - nLim)
         let mx, my = k * lim.Mx / 1e6, k * lim.My / 1e6
         { Theta = thetaDeg; Dn = nan; N = nKN; Mx = mx; My = my; Mu = sqrt (mx * mx + my * my)
-          Phi = phi; Nub = ax.Nub; Nuo = ax.Nuo }
+          Phi = phi; Nub = ax.Nub; Nuo = ax.Nuo; EpsS = lim.EpsSt }
     else
         let dn = Ultimate.solveDn sec c thetaDeg (nKN * 1000.0) DefaultStrips
         let st = Ultimate.evaluate sec c thetaDeg dn DefaultStrips
         let mx, my = st.Mx / 1e6, st.My / 1e6
         { Theta = thetaDeg; Dn = dn; N = nKN; Mx = mx; My = my; Mu = sqrt (mx * mx + my * my)
-          Phi = phi; Nub = ax.Nub; Nuo = ax.Nuo }
+          Phi = phi; Nub = ax.Nub; Nuo = ax.Nuo; EpsS = st.EpsSt }
 
 let atTheta (sec: Section) (c: Concrete) (thetaDeg: float) (nKN: float) (phi0: float) (duct: Design.Ductility) =
     atThetaAx sec c (axisProps sec c thetaDeg duct) thetaDeg nKN phi0 duct

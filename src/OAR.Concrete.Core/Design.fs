@@ -28,7 +28,8 @@ let phiTension (ductility: Ductility) (phiB: float) (nTension: float) (nuot: flo
     | ClassL -> 0.65
     | ClassN -> phiB + (0.85 - phiB) * min 1.0 (abs nTension / abs nuot)
 
-/// Squash load Nuo, Cl 10.6.2.2: α1 f'c Ac + fsy As (N); Ac = gross concrete less bars
+/// Squash load Nuo, Cl 10.6.2.2: α1 f'c Ac + fsy As (N); Ac = gross concrete less bars.
+/// Callers pass each bar's stress at squash: min(fsy, Es εcu), so high-strength bars (e.g. threadbar) are not counted at full yield.
 let squash (fc: float) (grossArea: float) (bars: (float * float) list) =
     let asTotal = bars |> List.sumBy fst
     alpha1 fc * fc * (grossArea - asTotal) + (bars |> List.sumBy (fun (a, fsy) -> a * fsy))

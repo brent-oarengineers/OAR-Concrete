@@ -159,7 +159,7 @@ Tabs C1 (rectangular example, Brent's previous RC_Column sheet) and C2 (Ø600 pi
   (N*, Mx and My at top and bottom).
 - **Bars**: the typical layout comes from `OAR.CONCRETE.BARLAYOUT` (perimeter bars, corners included). Ten custom
   rows in the Bar Schedule take any bar at any x, y (from the section centre); set the typical bar to "None" for a
-  fully custom layout.
+  fully custom layout. Custom bars can be any bar on the Bars tab (own fsy and Es), e.g. TB threadbar.
 - **Slenderness (braced only)**: Cl 10.3 short-column limit, Nc from Cl 10.4.4 with βd = 0 when Le/r ≤ 40 and
   N* ≤ M2/(2D), km and δb ≥ 1 per axis, minimum eccentricity 0.05D about each axis.
 - **Capacity**: `OAR.CONCRETE.COLUMN` finds the neutral-axis direction θ for which the capacity vector (Mux, Muy)
