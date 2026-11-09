@@ -187,10 +187,12 @@ def build_tab(name, d):
     # ================================================================== SECTION + BAR SCHEDULE (helpers first; formulas reference them)
     # bar schedule rows
     BS0 = 190
-    TYP0, TYP1 = BS0 + 1, BS0 + NTYP
-    CUS0, CUS1 = TYP1 + 1, TYP1 + NCUS
-    BARS_ARG = f"$L${TYP0}:$O${CUS1}"
-    CLS_ARG = f"$J${TYP0}:$J${CUS1}"
+    # custom (input) rows first, then the typical layout (add-in array)
+    CUS0, CUS1 = BS0 + 1, BS0 + NCUS
+    TYP0, TYP1 = CUS1 + 1, CUS1 + NTYP
+    RS0, RS1 = CUS0, TYP1
+    BARS_ARG = f"$L${RS0}:$O${RS1}"
+    CLS_ARG = f"$J${RS0}:$J${RS1}"
     SEC = '«SHAPE»,«b»:«D»'
     MOD = '«fc»,«model»'
 
@@ -198,7 +200,7 @@ def build_tab(name, d):
     heading(ws, 73, "Section Properties")
     table_header(ws, 74, [("E74", "x axis (Mx)"), ("F74", "y axis (My)")])
     r = 75; sym(r, "Ag"); desc(r, '=IF(«CIRC»,"π D² / 4","b D")'); CA(f"E{r}", '=IF(«CIRC»,PI()*«b»^2/4,«b»*«D»)', "0", name="Ag"); U(f"G{r}", "mm²")
-    r = 76; sym(r, "As"); desc(r, "all bars (Bar Schedule)"); CA(f"E{r}", f"=SUM($L${TYP0}:$L${CUS1})", "0", name="As"); U(f"G{r}", "mm²")
+    r = 76; sym(r, "As"); desc(r, "all bars (Bar Schedule)"); CA(f"E{r}", f"=SUM($L${RS0}:$L${RS1})", "0", name="As"); U(f"G{r}", "mm²")
     r = 77; sym(r, "ρ"); desc(r, "As / Ag"); CA(f"E{r}", "=«As»/«Ag»", "0.00%", name="rho")
     r = 78; sym(r, "n"); desc(r, "typical | custom bars")
     CA(f"E{r}", f'=COUNTIFS($G${TYP0}:$G${TYP1},"<>",$H${TYP0}:$H${TYP1},">0")', "0", name="ntyp")
@@ -355,20 +357,22 @@ def build_tab(name, d):
 
     # ================================================================== BAR SCHEDULE (last page)
     heading(ws, BS0 - 3, "Bar Schedule")
-    note(ws, BS0 - 2, "Typical bars from OAR.CONCRETE.BARLAYOUT (rectangular: perimeter, top face left → right, then clockwise; circular: equally spaced, first at the top). Custom bars: enter x, y and bar.")
+    note(ws, BS0 - 2, "Custom bars C1–C10: enter x, y (mm from the section centre) and bar – added to the typical layout. Typical rows are calculated by OAR.CONCRETE.BARLAYOUT (do not edit).")
     table_header(ws, BS0 - 1, [(f"B{BS0 - 1}:C{BS0 - 1}", "#"), (f"D{BS0 - 1}", "Source"), (f"E{BS0 - 1}", "x (mm)"), (f"F{BS0 - 1}", "y (mm)"),
                                (f"G{BS0 - 1}", "Bar"), (f"H{BS0 - 1}", "As (mm²)"), (f"I{BS0 - 1}", "fsy (MPa)"), (f"J{BS0 - 1}:K{BS0 - 1}", "Class")])
     ws.row_dimensions[BS0].height = 6
     lab(f"L{BS0 - 1}", "engine: As | depth | fsy | x from left", sz=7, color=GREY)
-    for k in range(NTYP + NCUS):
-        rr = TYP0 + k; typ = k < NTYP
-        ws.merge_cells(f"B{rr}:C{rr}"); ws[f"B{rr}"].value = k + 1; ws[f"B{rr}"].font = font(8, color=GREY); ws[f"B{rr}"].alignment = CEN
-        ws[f"D{rr}"].value = "typical" if typ else "custom"; ws[f"D{rr}"].font = font(8, color=GREY)
+    for k in range(NCUS + NTYP):
+        rr = CUS0 + k; typ = k >= NCUS
+        ws.merge_cells(f"B{rr}:C{rr}"); ws[f"B{rr}"].value = (k - NCUS + 1) if typ else f"C{k + 1}"
+        ws[f"B{rr}"].font = font(8, color=GREY); ws[f"B{rr}"].alignment = CEN
+        ws[f"D{rr}"].value = "typical (calculated)" if typ else "custom – enter x, y, bar"
+        ws[f"D{rr}"].font = font(8, color=GREY if typ else "000000", i=not typ)
         if typ:
             calc(ws, f"E{rr}", None, "0.0"); calc(ws, f"F{rr}", None, "0.0")
             CA(f"G{rr}", f'=IF(E{rr}="","",«bar»)')
         else:
-            c = d["custom"][k - NTYP] if k - NTYP < len(d.get("custom", [])) else (None, None, None)
+            c = d["custom"][k] if k < len(d.get("custom", [])) else (None, None, None)
             IN(f"E{rr}", c[0], "0.0"); IN(f"F{rr}", c[1], "0.0"); IN(f"G{rr}", c[2])
         CA(f"H{rr}", f'=IF(OR(G{rr}="",G{rr}="None"),"",{barv(f"G{rr}", 3)})', "0")
         CA(f"I{rr}", f'=IF(H{rr}="","",{barv(f"G{rr}", 4)})', "0")
@@ -380,8 +384,8 @@ def build_tab(name, d):
             pend.append((f"{col}{rr}", f)); ws[f"{col}{rr}"].font = font(7, color=GREY)
     pend.append((f"E{TYP0}", f'=IF(OR(«bar»="",«bar»="None"),"",OAR.CONCRETE.BARLAYOUT({SEC},«edge»,«n1»,«n2»,{NTYP}))'))
     arrays.append(f"E{TYP0}:F{TYP1}")
-    LAST = CUS1 + 2
-    sym(CUS1 + 1, "Σ"); desc(CUS1 + 1, "total"); CA(f"H{CUS1 + 1}", f"=«As»", "0"); U(f"I{CUS1 + 1}", "mm²")
+    LAST = RS1 + 2
+    sym(RS1 + 1, "Σ"); desc(RS1 + 1, "total"); CA(f"H{RS1 + 1}", f"=«As»", "0"); U(f"I{RS1 + 1}", "mm²")
     note(ws, LAST, "Ligature spacing and size, laps and anchorage are not covered by this calc.")
 
     # ================================================================== SUMMARY + CHECKS (page 1)
@@ -501,8 +505,8 @@ def build_tab(name, d):
     ch = chart()
     ch.series.append(line_series(Reference(ws, range_string=f"'{name}'!$AL${HR + 1}:$AL${HR + 73}"),
                                  Reference(ws, range_string=f"'{name}'!$AM${HR + 1}:$AM${HR + 73}"), "404040"))
-    ch.series.append(line_series(Reference(ws, range_string=f"'{name}'!$Q${TYP0}:$Q${CUS1}"),
-                                 Reference(ws, range_string=f"'{name}'!$R${TYP0}:$R${CUS1}"), GREEN, marker=True))
+    ch.series.append(line_series(Reference(ws, range_string=f"'{name}'!$Q${RS0}:$Q${RS1}"),
+                                 Reference(ws, range_string=f"'{name}'!$R${RS0}:$R${RS1}"), GREEN, marker=True))
     ch.series[-1].marker.size = 6
     ws.add_chart(ch, f"G{CH + 19}")
 
