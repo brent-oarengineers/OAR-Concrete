@@ -178,6 +178,17 @@ reference (uniaxial and biaxial, within 0.3 %) and Brent's pile calculator (Ø60
 
 Not covered: unbraced (sway) columns, ligature spacing / confinement, detailing.
 
+## OAR ribbon – Export calcs to PDF
+
+The add-in adds an **OAR** tab to the ribbon with **Export calcs to PDF**. It finds every visible tab coloured OAR
+green (465A52 – the house calc tab colour), in tab order, groups them and exports them as one PDF using each tab's print
+area and page setup. Data tabs (B8ADA5 or no colour) and hidden tabs are left out. It asks where to save
+(default `<workbook> - Calcs.pdf` next to the workbook) and opens the PDF afterwards.
+
+It is not concrete-specific: it works in any OAR calc workbook (steel, timber, wind, signs) because OAR Concrete is
+installed on every PC. Code: `src/OAR.Concrete.Excel/Ribbon.fs`. The ribbon tab uses `idQ="oar:OarTab"`, so other
+OAR add-ins can add their own groups to the same tab.
+
 ## Building and testing
 
 ```
