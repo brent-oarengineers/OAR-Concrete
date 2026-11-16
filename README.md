@@ -1,7 +1,7 @@
 # OAR Concrete
 
 Excel add-in and calc templates for reinforced concrete design to AS 3600-2018, in the OAR house calc style.
-Same build, release and install arrangement as OAR Steel and OAR Timber.
+Loaded by the shared OAR Loader (brent-oarengineers/OAR-Excel-Loader), like OAR Steel and OAR Timber; the release zip follows its `ADDIN-CONTRACT.md`.
 
 v0.1 has the **RC flexural member** calc (slab strip or beam, sagging and hogging, ULS and cracked SLS
 stresses). The engine is general enough for the next sheet, **columns** (rectangular and circular, M–N curves,
@@ -16,7 +16,7 @@ biaxial bending): see *Groundwork for the column sheet* below.
 | `tests/OAR.Concrete.Tests` | Benchmark tests (plain console runner): closed-form cases, `tools/reference_check.py`, Brent's pile script. |
 | `tools/` | `reference_check.py` – independent scipy re-implementation used to produce benchmark values; `Circular_Pile_AS3600.py` – Brent's original pile script (curvilinear benchmark). |
 | `template/` | `OAR - RC Flexural Design.xlsx` and `OAR - RC Column Design.xlsx`, with the scripts that build them (`build_template.py`, `build_column_template.py`, shared style in `oar_style.py`). |
-| `deploy/` | `Install-OARConcrete.cmd/.ps1` – per-user install / update at login. |
+| `deploy/` | `Install-OARConcrete.cmd/.ps1` – old installer, now only forwards to the OAR Loader's installer (`..\OAR Loader\Install-OARAddins.cmd`). |
 
 ## How the engine works (in plain terms)
 
