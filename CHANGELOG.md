@@ -3,6 +3,20 @@
 Each version that reaches `main` is built, tested and published automatically as a GitHub Release.
 The calc sheet shows the version it was calculated with (under the green title bar).
 
+## v0.5.2
+- Column sheet: **fsy override, typical bars (development)** input under Reinforcement. Blank = the bar's fsy; a value
+  limits the typical bars to it (e.g. fsy × Lprov / Lsy.t for short starters or laps), in tension and compression,
+  for every result (capacity, key points, M–N, contour). Custom bars keep their own bar's fsy. The summary line shows
+  the override when it is used.
+
+## v0.5.1
+- Release package follows the OAR Loader's `ADDIN-CONTRACT.md`: `Add-Ins\OAR Concrete\VERSION.txt` (written by the
+  build from the project version) next to `OAR.Concrete-AddIn64.xll` / `OAR.Concrete-AddIn32.xll`, plus the archive copy
+  in `Releases\v<version>\`. The build fails if any of these are missing.
+- `Install-OARConcrete.cmd/.ps1` no longer register the add-in with Excel; they only run
+  `..\OAR Loader\Install-OARAddins.cmd`. Install the OAR Loader instead (once per user).
+- No change to the calculations.
+
 ## v0.5.0
 - New **OAR** ribbon tab with **Export calcs to PDF**: exports every visible calc tab (OAR green tab colour 465A52)
   in tab order into one PDF, using each tab's print area and page setup. Data tabs (other colours) and hidden tabs are

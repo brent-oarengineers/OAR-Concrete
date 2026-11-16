@@ -2,7 +2,9 @@ name: Build, test and release
 
 # Every push and pull request: build on Windows, run the benchmark tests, keep the add-in as a download.
 # Every push to main with a version number that has not been released yet: publish a GitHub Release
-# with the add-in, the calc template, the install script and the release notes from CHANGELOG.md.
+# with the add-in, the calc templates and the release notes from CHANGELOG.md. The zip follows the OAR Loader's
+# ADDIN-CONTRACT.md (brent-oarengineers/OAR-Excel-Loader): Add-Ins\OAR Concrete\ with VERSION.txt, the two packed
+# .xll files and an archive copy in Releases\v<version>\; no install script that registers the add-in with Excel.
 
 on:
   push:
@@ -61,6 +63,13 @@ jobs:
           New-Item -ItemType Directory -Force $hist, "$root/Calc Templates" | Out-Null
           Copy-Item dist/OAR.Concrete-AddIn64.xll, dist/OAR.Concrete-AddIn32.xll, dist/Install-OARConcrete.cmd, dist/Install-OARConcrete.ps1, dist/CHANGELOG.md, dist/RELEASE_NOTES.md $addin
           Copy-Item dist/OAR.Concrete-AddIn64.xll, dist/OAR.Concrete-AddIn32.xll $hist
+          # VERSION.txt = the version the OAR Loader loads; written by the build that made the .xll files
+          [IO.File]::WriteAllText("$addin/VERSION.txt", "$env:VERSION`r`n")
+          # contract check: exactly one 64 and one 32-bit add-in, in the folder and the archive
+          foreach ($f in "$addin/OAR.Concrete-AddIn64.xll", "$addin/OAR.Concrete-AddIn32.xll", "$hist/OAR.Concrete-AddIn64.xll", "$hist/OAR.Concrete-AddIn32.xll", "$addin/VERSION.txt") {
+            if (-not (Test-Path $f)) { throw "release package is missing $f" }
+          }
+          if ((Get-ChildItem "$addin/*.xll").Count -ne 2) { throw "Add-Ins/OAR Concrete must hold exactly two .xll files" }
           Copy-Item "dist/OAR - RC Flexural Design.xlsx" "$root/Calc Templates/"
           Copy-Item "dist/OAR - RC Column Design.xlsx" "$root/Calc Templates/"
           Compress-Archive -Path "$root/*" -DestinationPath "dist/OAR-Concrete-v$env:VERSION.zip" -Force
