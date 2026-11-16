@@ -169,7 +169,9 @@ def build_tab(name, d):
     F("B52", '=IF(«CIRC»,"Number of bars","Bars per b face (incl. corners)")'); ws["B52"].font = font(9)
     IN("E52", d["n1"], "0", name="n1")
     lab("B53", "Bars per D face (incl. corners)"); IN("E53", d.get("n2"), "0", name="n2"); small("H53", "rectangular only")
-    note(ws, 54, "Custom bars: x, y from the section centre and bar size in the Bar Schedule (last page). They are added to the typical layout.")
+    lab("B54", "fsy override, typical bars (development)"); IN("E54", d.get("fsyo"), "0", name="fsyo"); U("F54", "MPa")
+    small("H54", "blank = bar fsy; short laps / starters: fsy × Lprov / Lsy.t")
+    note(ws, 55, "Custom bars (x, y, bar) go in the Bar Schedule (last page) and use their own bar's fsy; the override applies to the typical bars only.")
 
     heading(ws, 56, "Slenderness – braced column (Cl 10.3, 10.4)")
     table_header(ws, 57, [("E57", "x axis (Mx)"), ("F57", "y axis (My)")])
@@ -383,7 +385,7 @@ def build_tab(name, d):
             c = d["custom"][k] if k < len(d.get("custom", [])) else (None, None, None)
             IN(f"E{rr}", c[0], "0.0"); IN(f"F{rr}", c[1], "0.0"); IN(f"G{rr}", c[2])
         CA(f"H{rr}", f'=IF(OR(G{rr}="",G{rr}="None"),"",{barv(f"G{rr}", 3)})', "0")
-        CA(f"I{rr}", f'=IF(H{rr}="","",{barv(f"G{rr}", 4)})', "0")
+        CA(f"I{rr}", f'=IF(H{rr}="","",{f'IF(«fsyo»="",{barv(f"G{rr}", 4)},MIN(«fsyo»,{barv(f"G{rr}", 4)}))' if typ else barv(f"G{rr}", 4)})', "0")
         CA(f"J{rr}", f'=IF(H{rr}="","",{barv(f"G{rr}", 5)})')
         CA(f"K{rr}", f'=IF(H{rr}="","",IFERROR({barv(f"G{rr}", 6)}/1000,200))', "0")
         # engine columns
@@ -412,7 +414,7 @@ def build_tab(name, d):
     for x in ws["I10:K10"][0]: x.border = BOX
     passfail_cf(ws, "I10:K10", "$I$10")
     ws.conditional_formatting.add("I10:K10", FormulaRule(formula=['$I$10="UPDATE ADD-IN"'], fill=PatternFill(bgColor="C55A11"), font=Font(color="FFFFFF", bold=True)))
-    F("B11", '="Lu "&«Lu»&" mm  ·  φ0 "&TEXT(«phi0»,"0.00")&"  ·  "&«model»&" block  ·  biaxial: "&IF(«CIRC»,"strain compatibility",«method»)')
+    F("B11", '="Lu "&«Lu»&" mm  ·  φ0 "&TEXT(«phi0»,"0.00")&IF(«fsyo»="","","  ·  fsy "&«fsyo»&" (typ.)")&"  ·  "&«model»&" block  ·  biaxial: "&IF(«CIRC»,"strain compatibility",«method»)')
     ws["B11"].font = font(7, color=GREY)
     firsterr = f'IFERROR(INDEX(E{AX0}:F{AX1},MATCH("#OAR*",E{AX0}:E{AX1},0),1),IFERROR(INDEX(E{C0}:J{C0},1,MATCH("#OAR*",E{C0}:J{C0},0)),IFERROR(INDEX(E{TYP0}:E{TYP1},MATCH("#OAR*",E{TYP0}:E{TYP1},0)),"")))'
     ws["F11"].value = (f'=IFERROR(IF({errs}>0,{firsterr},IF(COUNT(I{CHK0}:I{CHK1})=0,"","Governs: "&INDEX(B{CHK0}:B{CHK1},MATCH(MAX(I{CHK0}:I{CHK1}),I{CHK0}:I{CHK1},0))'
