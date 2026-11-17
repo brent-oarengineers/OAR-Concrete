@@ -3,6 +3,12 @@
 Each version that reaches `main` is built, tested and published automatically as a GitHub Release.
 The calc sheet shows the version it was calculated with (under the green title bar).
 
+## v0.6.1
+- Tilt panel template: extra bars are entered as bar | spacing (e.g. N12-300 over the strip width; top band
+  extras over hb) instead of a number of bars; bars shown as N16-200 in the summary.
+- Default load cases: 1.35G replaced by **0.9G + Wu inward + roof uplift**, the least relief from the roof load
+  eccentricity under inward wind (check alongside 1.2G + Wu inward, which has the higher N* and δb).
+
 ## v0.6.0
 - **New template: OAR - Tilt Panel Design.xlsx** – in-service design of tilt-up panels to AS 3600-2018, one tab per
   panel or design strip (solid panel b = 1000, or a jamb strip beside an opening with its own design width, wind and

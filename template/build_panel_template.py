@@ -41,8 +41,8 @@ wb.remove(wb.active)
 # =========================== DATA TAB: Bars ===========================
 D_ = wb.create_sheet("Bars")
 setup_data_tab(D_, "Reinforcement – bar properties",
-               "AS/NZS 4671 nominal values. S = 250 MPa deformed (D250N), R = plain round, L = mesh wire (Class L: SL92 = L9 @ 200, SL82 = L8 @ 200, "
-               "SL102 = L10 @ 200). Edit or add rows; the calc tabs read this list.",
+               "AS/NZS 4671 nominal values. S = 250 MPa deformed (D250N), R = plain round, L = mesh wire (Class L: SL92 = L9-200, SL82 = L8-200, "
+               "SL102 = L10-200). Edit or add rows; the calc tabs read this list.",
                {"B": 10, "C": 10, "D": 10, "E": 10, "F": 10, "G": 10, "H": 44})
 for j, t in enumerate(["Bar", "db (mm)", "Ab (mm²)", "fsy (MPa)", "Class", "Es (MPa)", "Note"]):
     c = D_.cell(4, 2 + j); c.value = t; c.font = font(8, True); c.fill = fill(HDR_FILL); c.border = BOX; c.alignment = CEN
@@ -160,10 +160,10 @@ def build_tab(name, d):
     lab("B61", "Cover to vertical bars (two layers)"); IN("E61", d.get("cover", 40), "0", name="cover"); U("F61", "mm")
     lab("B62", "Vertical bars: bar | spacing (each layer)"); IN("E62", d["vbar"], name="vbar"); IN("F62", d["vs"], "0", name="vs"); U("G62", "mm")
     lab("B63", "Horizontal bars: bar | spacing (each layer)"); IN("E63", d["hbar"], name="hbar"); IN("F63", d["hs"], "0", name="hs"); U("G63", "mm")
-    lab("B64", "Extra vertical bars in strip: no. | bar (each layer)"); IN("E64", d.get("nx", 0), "0", name="nx"); IN("F64", d.get("xbar", "None"), name="xbar")
-    lab("B65", "Extra horizontal bars in top band: no. | bar (each layer)"); IN("E65", d.get("nhb", 0), "0", name="nhb"); IN("F65", d.get("hbbar", "None"), name="hbbar")
+    lab("B64", "Extra vertical bars in strip: bar | spacing (each layer)"); IN("E64", d.get("xbar", "None"), name="xbar"); IN("F64", d.get("xs"), "0", name="xs"); U("G64", "mm")
+    lab("B65", "Extra horizontal bars in top band: bar | spacing (each layer)"); IN("E65", d.get("hbbar", "None"), name="hbbar"); IN("F65", d.get("hbs"), "0", name="hbs"); U("G65", "mm")
     lab("B66", "Restrained against horizontal shrinkage"); IN("E66", d.get("hrest", "No"), name="hrest"); small("H66", "No = free to move (panel joints)")
-    note(ws, 67, "Mesh: wire L9 @ 200 = SL92 etc. Two layers: same bars each face; horizontal bars inside the vertical bars. Class L wire → φ = 0.65 (whole section).")
+    note(ws, 67, "Mesh: wire L9-200 = SL92 etc. Extras: e.g. N12-300 over the strip width (top band: over hb). Two layers: same bars each face; horizontal bars inside the vertical bars. Class L wire → φ = 0.65 (whole section).")
 
     heading(ws, 68, "Roof Loads at the Top Support (unfactored, per metre of wall)")
     lab("B69", "Roof G reaction"); IN("E69", d.get("Gr", 0), "0.00", name="Gr"); U("F69", "kN/m")
@@ -459,12 +459,12 @@ def build_tab(name, d):
     lab(f"L{SB0 - 2}", "Add-in bar tables (not printed): As | depth from outside face | fsy | x | Es | class", sz=7, color=GREY, i=True)
     lab(f"S{SB0}", "strip: main outside/central | main inside | extra outside/central | extra inside", sz=7, color=GREY)
     lab(f"S{BB0}", "top band: horizontal bars, same order", sz=7, color=GREY)
-    def bar_rows(r0, bar, spacing, width, nbar, xbarref, depth_out, depth_in, xdepth_out, xdepth_in):
+    def bar_rows(r0, bar, spacing, width, xspacing, xbarref, depth_out, depth_in, xdepth_out, xdepth_in):
         ab = f'IFERROR({barv(bar, 3)},0)'; ax_ = f'IFERROR({barv(xbarref, 3)},0)'
         rows = [(f'=IF(N({spacing})>0,{ab}*{width}/{spacing},0)', depth_out, bar),
                 (f'=IF(AND(«TWO»,N({spacing})>0),{ab}*{width}/{spacing},0)', depth_in, bar),
-                (f'=N({nbar})*{ax_}', xdepth_out, xbarref),
-                (f'=IF(«TWO»,N({nbar})*{ax_},0)', xdepth_in, xbarref)]
+                (f'=IF(N({xspacing})>0,{ax_}*{width}/{xspacing},0)', xdepth_out, xbarref),
+                (f'=IF(AND(«TWO»,N({xspacing})>0),{ax_}*{width}/{xspacing},0)', xdepth_in, xbarref)]
         for k_, (fa, fd, bref) in enumerate(rows):
             rr = r0 + k_
             for col, f in (("L", fa), ("M", fd), ("N", f'=IFERROR({barv(bref, 4)},500)'), ("P", f'=IFERROR({barv(bref, 6)},200000)'),
@@ -472,10 +472,10 @@ def build_tab(name, d):
                 F(f"{col}{rr}", f); ws[f"{col}{rr}"].font = font(7, color=GREY)
     dbv = f'IFERROR({barv("«vbar»", 2)},0)'; dbh = f'IFERROR({barv("«hbar»", 2)},0)'
     dbx = f'IFERROR({barv("«xbar»", 2)},0)'; dbhb = f'IFERROR({barv("«hbbar»", 2)},0)'
-    bar_rows(SB0, "«vbar»", "«vs»", "«b»", "«nx»", "«xbar»",
+    bar_rows(SB0, "«vbar»", "«vs»", "«b»", "«xs»", "«xbar»",
              f"=IF(«TWO»,«cover»+{dbv}/2,«tw»/2)", f"=«tw»-«cover»-{dbv}/2",
              f"=IF(«TWO»,«cover»+{dbx}/2,«tw»/2)", f"=«tw»-«cover»-{dbx}/2")
-    bar_rows(BB0, "«hbar»", "«hs»", "«hb»", "«nhb»", "«hbbar»",
+    bar_rows(BB0, "«hbar»", "«hs»", "«hb»", "«hbs»", "«hbbar»",
              f"=IF(«TWO»,«cover»+{dbv}+{dbh}/2,«tw»/2)", f"=«tw»-«cover»-{dbv}-{dbh}/2",
              f"=IF(«TWO»,«cover»+{dbv}+{dbhb}/2,«tw»/2)", f"=«tw»-«cover»-{dbv}-{dbhb}/2")
 
@@ -483,7 +483,7 @@ def build_tab(name, d):
     heading(ws, 8, "Design Summary")
     lab("B9", "Adopted panel / strip", sz=7, color=GREY); lab("F9", "Max utilisation", sz=7, color=GREY); lab("I9", "Status", sz=7, color=GREY)
     ws.merge_cells("B10:E10"); ws.merge_cells("F10:G10"); ws.merge_cells("I10:K10")
-    reo = ('IF(«TWO»,"2 layers ","central ")&«vbar»&"@"&«vs»&IF(N(«nx»)>0," + "&«nx»&«xbar»&IF(«TWO»," EF",""),"")')
+    reo = ('IF(«TWO»,"2 layers ","central ")&«vbar»&"-"&«vs»&IF(AND(N(«xs»)>0,«xbar»<>"None")," + "&«xbar»&"-"&«xs»&" extra","")&IF(«TWO»," EF","")')
     F("B10", f'=«tw»&" thk  ·  "&{reo}&"  ·  f\'c "&«fc»')
     ws["B10"].font = font(12, True, color=GREEN); ws["B10"].alignment = LEFT
     CHK0, CHK1 = 15, 29
@@ -573,7 +573,7 @@ def build_tab(name, d):
         for part in ref.split(): v.add(part)
     dvl('"Rectangular,Curvilinear,Parabolic"', "E38"); dvl(f'"Calculated,{MANUAL}"', "E42"); dvl('"No,Yes"', "E43 E66")
     dvl(f'"{TOP_OPTS[0]},{TOP_OPTS[1]}"', "E48"); dvl('"Central,Two layers"', "E60")
-    dvl("=BarList", "E62:E63 F64:F65")
+    dvl("=BarList", "E62:E65")
     grey = [("E61", 'NOT(«TWO»)', "B61"), ("E49", f'«top»<>"{TOP_OPTS[1]}"', "B49"), ("E65:F65", f'«top»<>"{TOP_OPTS[1]}"', "B65"),
             ("E43", "NOT(«MAN»)", "B43"), (f"E{MAN0}:I{MAN0 + NLC}", "NOT(«MAN»)", f"B{MAN0}:D{MAN0 + NLC}")]
     for ref, cond, labref in grey:
@@ -589,9 +589,9 @@ def build_tab(name, d):
 
 # ---------------- examples ----------------
 # Load cases: (description, γG, γQ/ψ, γ roof Wu, p panel kPa, p parapet kPa); last row = SLS.
-WIND_LCS = [("1.35G", 1.35, 0, 0, 0, 0),
-            ("1.2G + 1.5Q", 1.2, 1.5, 0, 0, 0),
+WIND_LCS = [("1.2G + 1.5Q", 1.2, 1.5, 0, 0, 0),
             ("1.2G + Wu inward", 1.2, 0, 0, 1.10, 1.80),
+            ("0.9G + Wu inward + roof uplift", 0.9, 0, 1, 1.10, 1.80),
             ("0.9G + Wu outward + roof uplift", 0.9, 0, 1, -1.20, -1.80),
             ("1.2G + Wu outward", 1.2, 0, 0, -1.20, -1.80),
             ("G + 0.3Q + Eu (face load)", 1.0, 0.3, 0, "=pE", "=pE"),
@@ -601,9 +601,9 @@ p1 = dict(loc="Typical solid panel – 9.0 m span, 0.9 m parapet", tw=200, fc=32
           Gr=2.5, Qr=1.2, Wr=-3.0, ecc=150, ceq=0.15, lcs=WIND_LCS)
 p2 = dict(loc="Jamb strip beside a 4.0 m roller door", tw=200, fc=32, Hs=9000, hp=900, W=6000, top=TOP_OPTS[0],
           strip="Jamb strip – 4 m roller door", b=1200, bt=3200, br=3200, gadd=13.5, lay="Two layers", cover=40,
-          vbar="N12", vs=200, hbar="N12", hs=200, nx=3, xbar="N20", Gr=2.5, Qr=1.2, Wr=-3.0, ecc=150, ceq=0.15, lcs=WIND_LCS)
+          vbar="N12", vs=200, hbar="N12", hs=200, xbar="N20", xs=400, Gr=2.5, Qr=1.2, Wr=-3.0, ecc=150, ceq=0.15, lcs=WIND_LCS)
 p3 = dict(loc="Solid panel – top supported at the panel joints only (rafters)", tw=200, fc=32, Hs=9000, hp=0, W=6000, top=TOP_OPTS[1], hb=1200,
-          strip="Solid panel", b=1000, bt=1000, br=1000, gadd=0, lay="Central", vbar="N16", vs=200, hbar="N12", hs=200, nhb=3, hbbar="N16",
+          strip="Solid panel", b=1000, bt=1000, br=1000, gadd=0, lay="Central", vbar="N16", vs=200, hbar="N12", hs=200, hbbar="N16", hbs=400,
           Gr=2.5, Qr=1.2, Wr=-3.0, ecc=150, ceq=0.15, lcs=WIND_LCS)
 
 

@@ -132,9 +132,9 @@ the capacity at N* (`COLUMN`), the top-band capacity (`ULT`) and Icr (`CRACKED`)
   Δ = Δ1/(1 − Ns/Ncr).
 - **Manual (RFEM)**: N*, M* span, M* top, V* per case and Δ1 for SLS; "RFEM includes 2nd-order effects = Yes" sets δb = 1.
 
-Example tabs (all PASS): **P1** 200 solid, central N16 @ 200, 9.0 m + 0.9 m parapet (governs ρh 75 %, LC5 N–M 69 %,
-δb 2.31); **P2** jamb strip b 1200 beside a 4 m roller door, two layers N12 @ 200 + 3 N20 EF (LC5 56 %);
-**P3** as P1 without parapet, top at the joints only, 3 N16 in a 1200 band (LC5 59 %, band 51 %).
+Example tabs (all PASS): **P1** 200 solid, central N16-200, 9.0 m + 0.9 m parapet (governs ρh 75 %, LC5 N–M 69 %,
+δb 2.31); **P2** jamb strip b 1200 beside a 4 m roller door, two layers N12-200 + N20-400 extra EF (LC5 56 %);
+**P3** as P1 without parapet, top at the joints only, N16-400 extra in a 1200 band (LC5 59 %, band 51 %).
 `python tools/check_panel_template.py` confirms every case against an independent calc (needs LibreOffice).
 
 ## Checking the template in Excel
