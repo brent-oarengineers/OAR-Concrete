@@ -3,6 +3,30 @@
 Each version that reaches `main` is built, tested and published automatically as a GitHub Release.
 The calc sheet shows the version it was calculated with (under the green title bar).
 
+## v0.6.0
+- **New template: OAR - Tilt Panel Design.xlsx** – in-service design of tilt-up panels to AS 3600-2018, one tab per
+  panel or design strip (solid panel b = 1000, or a jamb strip beside an opening with its own design width, wind and
+  roof tributary widths and extra G at the head). Lifting and bracing are not covered (contractor's lifting designer).
+  - Base pinned (doweled; slab-tied panels also designed as pinned). Top support continuous (wind beam / raking angle)
+    or at the panel joints only (rafters); optional parapet above the top support.
+  - Central or two-layer reinforcement, mesh (Class L) or bars @ spacing, extra bars in the strip / top band.
+  - 6 ULS load cases + 1 SLS row (γG, γQ/ψ, roof wind reaction factor, net pressure on the panel and parapet), roof
+    G / Q / Wu at the top support with eccentricity; AS 1170.4 face load from a coefficient.
+  - Braced moment magnifier (Cl 10.4) on the vertical strip: km = 1.0 with lateral load, βd from the permanent share
+    of N* per case (or an override), Nc from Mc = Mub; M*d against φMu at N* by strain compatibility
+    (`OAR.CONCRETE.COLUMN`). Top-support end moment (parapet + eccentricity) checked separately, not magnified.
+  - Shear (Cl 8.2.4.3, no shear reinforcement); top and base reactions per metre and per panel.
+  - SLS deflection: Ief (Cl 8.5.3.1, σcs and N/Ag in Mcr) with P-Δ amplification, limit Hs / x (input).
+  - Joint-supported top: the top band is checked as a horizontal beam between the joints (flexure, deflection added at
+    mid-height) – approximate, flagged on the sheet.
+  - *Design actions = Manual (RFEM)*: N*, M* span, M* top, V* and Δ1 per case from RFEM for openings or point supports,
+    with "RFEM includes 2nd-order effects" (δb = 1).
+  - Wall reinforcement minimums (Cl 11.7) and spacing; Le/r > 120 flagged for review.
+- No new add-in functions (the sheet uses `COLUMNAXIS`, `COLUMN`, `ULT`, `CRACKED`); version bump so the template's
+  add-in check matches the release.
+- `tools/check_panel_template.py`: recalculates the template in LibreOffice with independent section routines in place
+  of the add-in and checks every load case against a separate Python calc of the panel.
+
 ## v0.5.2
 - Column sheet: **fsy override, typical bars (development)** input under Reinforcement. Blank = the bar's fsy; a value
   limits the typical bars to it (e.g. fsy × Lprov / Lsy.t for short starters or laps), in tension and compression,

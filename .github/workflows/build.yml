@@ -43,6 +43,7 @@ jobs:
           Copy-Item "$pub/OAR.Concrete.Excel-AddIn-packed.xll"   "dist/OAR.Concrete-AddIn32.xll"
           Copy-Item "template/OAR - RC Flexural Design.xlsx"   "dist/OAR - RC Flexural Design.xlsx"
           Copy-Item "template/OAR - RC Column Design.xlsx"     "dist/OAR - RC Column Design.xlsx"
+          Copy-Item "template/OAR - Tilt Panel Design.xlsx"    "dist/OAR - Tilt Panel Design.xlsx"
           Copy-Item "deploy/Install-OARConcrete.ps1"              "dist/"
           Copy-Item "deploy/Install-OARConcrete.cmd"              "dist/"
           Copy-Item "CHANGELOG.md"                             "dist/"
@@ -72,6 +73,7 @@ jobs:
           if ((Get-ChildItem "$addin/*.xll").Count -ne 2) { throw "Add-Ins/OAR Concrete must hold exactly two .xll files" }
           Copy-Item "dist/OAR - RC Flexural Design.xlsx" "$root/Calc Templates/"
           Copy-Item "dist/OAR - RC Column Design.xlsx" "$root/Calc Templates/"
+          Copy-Item "dist/OAR - Tilt Panel Design.xlsx" "$root/Calc Templates/"
           Compress-Archive -Path "$root/*" -DestinationPath "dist/OAR-Concrete-v$env:VERSION.zip" -Force
 
       - uses: actions/upload-artifact@v4
@@ -88,4 +90,4 @@ jobs:
           $tag = "v$env:VERSION"
           gh release view $tag 2>$null
           if ($LASTEXITCODE -eq 0) { Write-Host "$tag already released - nothing to do"; exit 0 }
-          gh release create $tag "dist/OAR-Concrete-v$env:VERSION.zip" "dist/OAR - RC Flexural Design.xlsx" "dist/OAR - RC Column Design.xlsx" --title "OAR Concrete $tag" --notes-file dist/RELEASE_NOTES.md --target $env:GITHUB_SHA
+          gh release create $tag "dist/OAR-Concrete-v$env:VERSION.zip" "dist/OAR - RC Flexural Design.xlsx" "dist/OAR - RC Column Design.xlsx" "dist/OAR - Tilt Panel Design.xlsx" --title "OAR Concrete $tag" --notes-file dist/RELEASE_NOTES.md --target $env:GITHUB_SHA
