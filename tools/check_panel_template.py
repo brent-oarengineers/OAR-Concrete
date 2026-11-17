@@ -134,7 +134,7 @@ def stub_values(wsF, wsV):
             m = re.search(r'"Rect",\$([A-Z])\$(\d+):\$([A-Z])\$(\d+),\$L\$(\d+)', f)
             b = num(wsV[f"{m.group(1)}{m.group(2)}"].value); D = num(wsV[f"{m.group(3)}{m.group(4)}"].value)
             bs = bars(int(m.group(5)))
-            if ec is None: ec = num(wsV["E106"].value)
+            if ec is None: ec = num(wsV["E122"].value)
             ref = c.coordinate
             col, row_ = re.match(r"([A-Z]+)(\d+)", ref).groups(); row_ = int(row_)
             if "COLUMNAXIS(" in f:
@@ -198,21 +198,31 @@ def panel(ws):
     b, bt, br, gadd = g("E54"), g("E55"), g("E56"), g("E57") or 0
     Gr, Qr, Wr, e, ceq = g("E69"), g("E70"), g("E71"), g("E72") or 0, g("E73") or 0
     two = g("E60") == "Two layers"; band = top.startswith("At panel joints") and g("E42") != "Manual (RFEM)"
-    Ec = g("E106"); L = Hs / 1000; gs = rho * tw / 1000 * b / 1000
+    Ec = g("E122"); L = Hs / 1000; gs = rho * tw / 1000 * b / 1000
     bars = []
-    for r in range(262, 266):
+    for r in range(278, 282):
         A = g(f"L{r}") or 0
         if A > 0: bars.append((A, g(f"M{r}"), g(f"N{r}"), g(f"P{r}"), g(f"Q{r}")))
     bbars = []
-    for r in range(268, 272):
+    for r in range(284, 288):
         A = g(f"L{r}") or 0
         if A > 0: bbars.append((A, g(f"M{r}"), g(f"N{r}"), g(f"P{r}"), g(f"Q{r}")))
     r_ = 0.3 * tw; Le = k * Hs; sl = Le / r_
     axp, axn = axis(b, tw, bars, fc, True), axis(b, tw, bars, fc, False)
     res = []
     pe = ceq * rho * tw / 1000
+    def wp(io, qz):
+        c = "E" if io == "i" else "F"
+        return qz * (g(f"{c}80") * g(f"{c}82") * g(f"{c}81") * g(f"{c}78") - g(f"{c}83") * g(f"{c}79"))
+    qzu, qzs = g("E75") or 0, g("F75") or 0
+    qzpu = g("E76") if g("E76") not in (None, "") else qzu; qzps = g("F76") if g("F76") not in (None, "") else qzs
+    pin_u, pout_u, pin_s, pout_s = wp("i", qzu), wp("o", qzu), wp("i", qzs), wp("o", qzs)
+    ppin_u, ppout_u = qzpu * g("E84"), qzpu * g("F84")
+    sls_in = abs(pin_s) >= abs(pout_s)
+    expect_p = {93: (pin_u, ppin_u), 94: (pin_u, ppin_u), 95: (pout_u, ppout_u), 96: (pout_u, ppout_u), 97: (pe, pe),
+                98: (pin_s if sls_in else pout_s, qzps * (g("E84") if sls_in else g("F84")))}
     for i in range(7):
-        lr = 76 + i
+        lr = 92 + i
         gG = g(f"E{lr}")
         if gG in (None, ""): res.append(None); continue
         gQ, gW = g(f"F{lr}") or 0, g(f"G{lr}") or 0
@@ -231,14 +241,15 @@ def panel(ws):
         Rb = w * L / 2 + MT / L; Rt = w * L - Rb + wpp * hp / 1000
         V = max(abs(Rb), abs(Rb - w * L), abs(wpp * hp / 1000))
         res.append(dict(w=w, Ptop=Ptop, MT=MT, x=x, M2=M2, N=Nst, gG=gG, p=p, Rb=Rb, Rt=Rt, V=V))
-    out = {"cases": []}
+    out = {"cases": [], "p": {r: (v, (g(f"H{r}"), g(f"I{r}"))) for r, v in expect_p.items()}}
     for i in range(6):
         c = res[i]
         if c is None: out["cases"].append(None); continue
         N_, M2 = c["N"], c["M2"]
         perm = c["gG"] * (Gr * br / 1000 + gadd + gs * (hp / 1000 + L - c["x"]))
-        bdin = g("E85")
-        bd = 0 if (N_ <= 0 or (sl <= 40 and N_ <= abs(M2) / (2 * tw / 1000))) else (bdin if bdin not in (None, "") else min(1, max(0, perm / N_)))
+        bdin = g("E101")
+        mperm = -c["gG"] * Gr * br / 1000 * e / 1000 * c["x"] / L
+        bd = 0 if (N_ <= 0 or M2 == 0 or (sl <= 40 and N_ <= abs(M2) / (2 * tw / 1000))) else (bdin if bdin not in (None, "") else min(1, max(0, mperm * math.copysign(1, M2) / abs(M2))))
         ax = axp if M2 >= 0 else axn
         Nc = math.pi ** 2 / Le ** 2 * 182 * ax["do"] * phi0 * ax["Mub"] * 1e6 / (1 + bd) / 1000
         km = 0.6 if c["p"] == 0 else 1.0
@@ -261,7 +272,7 @@ def panel(ws):
         Ast = (bars[1][0] + (bars[3][0] if len(bars) > 3 else 0)) if two else sum(t[0] for t in bars)
         Asc = (bars[0][0] + (bars[2][0] if len(bars) > 2 else 0)) if two else 0
         rw, rcw = Ast / (b * dd), Asc / (b * dd)
-        scs = max(0, (2.5 * rw - 0.8 * rcw) / (1 + 50 * rw) * ES * g("H84"))
+        scs = max(0, (2.5 * rw - 0.8 * rcw) / (1 + 50 * rw) * ES * g("H100"))
         Ns = s["Ptop"] + s["gG"] * gs * L / 2
         Ms_ = s["M2"]; Ig = b * tw ** 3 / 12; Z = b * tw ** 2 / 6
         Mcr = max(0, Z * (0.6 * math.sqrt(fc) - scs + Ns * 1000 / (b * tw)) / 1e6)
@@ -298,13 +309,15 @@ def main():
         for i, c in enumerate(ref["cases"]):
             if c is None: continue
             col = "EFGHIJ"[i]
-            cmp(tab, f"LC{i + 1} |M*d|", ws[f"{col}166"].value, c["Md"])
-            cmp(tab, f"LC{i + 1} δb", ws[f"H{146 + i}"].value, c["db"])
-            cmp(tab, f"LC{i + 1} ratio", ws[f"{col}167"].value, c["ratio"])
-            if c["top"] is not None: cmp(tab, f"LC{i + 1} top ratio", ws[f"{col}174"].value, c["top"])
-            cmp(tab, f"LC{i + 1} V*", ws[f"{col}179"].value, c["V"])
-            if c["band"] is not None: cmp(tab, f"LC{i + 1} band ratio", ws[f"{col}198"].value, c["band"])
-        cmp(tab, "SLS deflection", ws["E217"].value, ref.get("defl"))
+            cmp(tab, f"LC{i + 1} |M*d|", ws[f"{col}182"].value, c["Md"])
+            cmp(tab, f"LC{i + 1} δb", ws[f"H{162 + i}"].value, c["db"])
+            cmp(tab, f"LC{i + 1} ratio", ws[f"{col}183"].value, c["ratio"])
+            if c["top"] is not None: cmp(tab, f"LC{i + 1} top ratio", ws[f"{col}190"].value, c["top"])
+            cmp(tab, f"LC{i + 1} V*", ws[f"{col}195"].value, c["V"])
+            if c["band"] is not None: cmp(tab, f"LC{i + 1} band ratio", ws[f"{col}214"].value, c["band"])
+        cmp(tab, "SLS deflection", ws["E233"].value, ref.get("defl"))
+        for r, ((pv, ppv), (ps, pps)) in ref["p"].items():
+            cmp(tab, f"row {r} p", ps, pv); cmp(tab, f"row {r} pp", pps, ppv)
         for r in range(15, 34):
             print(f"     {str(ws[f'B{r}'].value or ''):<16} {str(ws[f'D{r}'].value or '')[:70]:<70} {ws[f'E{r}'].value!s:>10.8} {ws[f'F{r}'].value!s:>10.8} {ws[f'I{r}'].value!s:>8.6} {ws[f'J{r}'].value}")
     print("ALL OK" if bad == 0 else f"{bad} mismatches")

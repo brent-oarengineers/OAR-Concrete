@@ -163,7 +163,7 @@ def build_tab(name, d):
     lab("B64", "Extra vertical bars in strip: bar | spacing (each layer)"); IN("E64", d.get("xbar", "None"), name="xbar"); IN("F64", d.get("xs"), "0", name="xs"); U("G64", "mm")
     lab("B65", "Extra horizontal bars in top band: bar | spacing (each layer)"); IN("E65", d.get("hbbar", "None"), name="hbbar"); IN("F65", d.get("hbs"), "0", name="hbs"); U("G65", "mm")
     lab("B66", "Restrained against horizontal shrinkage"); IN("E66", d.get("hrest", "No"), name="hrest"); small("H66", "No = free to move (panel joints)")
-    note(ws, 67, "Mesh: wire L9-200 = SL92 etc. Extras: e.g. N12-300 over the strip width (top band: over hb). Two layers: same bars each face; horizontal bars inside the vertical bars. Class L wire → φ = 0.65 (whole section).")
+    note(ws, 67, "SL92 = L9-200. Extras (e.g. N12-300) spread over b (band: over hb). Two layers: same bars each face, horizontals inside. Class L → φ 0.65.")
 
     heading(ws, 68, "Roof Loads at the Top Support (unfactored, per metre of wall)")
     lab("B69", "Roof G reaction"); IN("E69", d.get("Gr", 0), "0.00", name="Gr"); U("F69", "kN/m")
@@ -173,27 +173,57 @@ def build_tab(name, d):
     lab("B73", "Earthquake face load coefficient Fc / Wc"); IN("E73", d.get("ceq"), "0.000", name="ceq")
     lab("G73", "pE =", al=RIGHT); CA("H73", "=N(«ceq»)*«rhoc»*«tw»/1000", "0.00", name="pE"); U("I73", "kPa"); small("J73", "AS 1170.4 Sec 8")
 
-    heading(ws, 74, "Load Cases")
-    table_header(ws, 75, [("B75:C75", "Case"), ("D75", "Description"), ("E75", "γG"), ("F75", "γQ / ψ"), ("G75", "γ roof Wu"),
-                          ("H75", "p panel (kPa)"), ("I75", "p parapet (kPa)")])
-    LC0 = 76
+    heading(ws, 74, "Wind – AS/NZS 1170.2 net pressures on the panel and parapet")
+    lab("B75", "Design wind pressure qz: ULS | SLS (panel)"); IN("E75", d.get("qzu"), "0.00", name="qzu"); IN("F75", d.get("qzs"), "0.00", name="qzs"); U("G75", "kPa")
+    lab("B76", "qz at parapet top: ULS | SLS"); IN("E76", d.get("qzpu"), "0.00", name="qzpu"); IN("F76", d.get("qzps"), "0.00", name="qzps"); U("G76", "kPa"); small("H76", "blank = panel qz")
+    table_header(ws, 77, [("E77", "Inward"), ("F77", "Outward")])
+    WIN = [("78", "Cp,e (+ towards the surface)", "cpe", (0.7, -0.65), "windward | side / leeward"),
+           ("79", "Cp,i (+ = internal pressure)", "cpi", (-0.3, 0.2), "internal suction | pressure"),
+           ("80", "Ka (area reduction)", "ka", (1.0, 1.0), ""),
+           ("81", "Kl (local pressure)", "kl", (1.0, 1.0), "panels near corners"),
+           ("82", "Kc,e (combination, external)", "kce", (1.0, 1.0), ""),
+           ("83", "Kc,i (combination, internal)", "kci", (1.0, 1.0), ""),
+           ("84", "Parapet Cp,n (net, + inward)", "cpn", (1.5, -1.5), "")]
+    for rw, t, key, dflt, hint in WIN:
+        lab(f"B{rw}", t); v = d.get(key, dflt)
+        IN(f"E{rw}", v[0], "0.00", name=key + "i"); IN(f"F{rw}", v[1], "0.00", name=key + "o")
+        if hint: small(f"H{rw}", hint)
+    qzp = lambda ls: f'IF(«qzp{ls}»="",«qz{ls}»,«qzp{ls}»)'
+    for rw, t, ls in (("85", "p ULS = qz (Ka Kc,e Kl Cp,e − Kc,i Cp,i)", "u"), ("86", "p SLS", "s")):
+        lab(f"B{rw}", t)
+        for col, io, nm_ in (("E", "i", "pin"), ("F", "o", "pout")):
+            CA(f"{col}{rw}", f'=N(«qz{ls}»)*(«ka{io}»*«kce{io}»*«kl{io}»*«cpe{io}»-«kci{io}»*«cpi{io}»)', "0.00", name=nm_ + ls)
+        U(f"G{rw}", "kPa")
+    for rw, t, ls in (("87", "pp parapet ULS = qz,p Cp,n", "u"), ("88", "pp parapet SLS", "s")):
+        lab(f"B{rw}", t)
+        for col, io, nm_ in (("E", "i", "ppin"), ("F", "o", "ppout")):
+            CA(f"{col}{rw}", f'=N({qzp(ls)})*«cpn{io}»', "0.00", name=nm_ + ls)
+        U(f"G{rw}", "kPa")
+    note(ws, 89, "Net pressure + inward. The load cases below take these values (formulas in the input cells – overwrite to enter a pressure directly). SLS row: larger of inward / outward.")
+
+    heading(ws, 90, "Load Cases")
+    table_header(ws, 91, [("B91:C91", "Case"), ("D91", "Description"), ("E91", "γG"), ("F91", "γQ / ψ"), ("G91", "γ roof Wu"),
+                          ("H91", "p panel (kPa)"), ("I91", "p parapet (kPa)")])
+    LC0 = 92
     for i in range(NLC + 1):
         r = LC0 + i; lc = d["lcs"][i] if i < len(d["lcs"]) else None
         IN(f"B{r}:C{r}", "SLS" if i == NLC else f"LC{i + 1}")
         IN(f"D{r}", lc[0] if lc else None, al=LEFT)
         for j, col in enumerate("EFGHI"):
-            IN(f"{col}{r}", lc[1 + j] if lc else None, "0.00")
+            v = lc[1 + j] if lc else None
+            IN(f"{col}{r}", None if isinstance(v, str) else v, "0.00")
+            if isinstance(v, str): F(f"{col}{r}", v)
     SLSR = LC0 + NLC
-    note(ws, 83, "p = net pressure on the panel, + inward (towards the building); parapet pressure likewise. Blank γG = case not used. SLS row: deflection (ψ on Q).")
-    lab("B84", "SLS deflection limit Hs /"); IN("E84", d.get("dlim", 150), "0", name="dlim")
-    lab("G84", "ε*cs (Mcr, Cl 8.5.3.1)", al=RIGHT); IN("H84", d.get("ecs", 0.0006), "0.00000", name="ecs")
-    lab("B85", "βd override (blank = permanent share of N*)"); IN("E85", d.get("bdin"), "0.00", name="bdin"); small("H85", "Cl 10.4.3: G share of N*")
+    note(ws, 99, "p = net pressure on the panel, + inward (towards the building); parapet pressure likewise. Blank γG = case not used. SLS row: deflection (ψ on Q).")
+    lab("B100", "SLS deflection limit Hs /"); IN("E100", d.get("dlim", 150), "0", name="dlim")
+    lab("G100", "ε*cs (Mcr, Cl 8.5.3.1)", al=RIGHT); IN("H100", d.get("ecs", 0.0006), "0.00000", name="ecs")
+    lab("B101", "βd override (blank = permanent share of M2*)"); IN("E101", d.get("bdin"), "0.00", name="bdin"); small("H101", "creep acts on the sustained moment")
 
-    heading(ws, 86, f"Manual Design Actions per Strip (RFEM) – used when Design actions = {MANUAL}")
-    note(ws, 87, "N* compression + at the critical section; M* + = inside face in tension. M* top = end moment at the top support. Δ1 = first-order SLS deflection, mm.")
-    table_header(ws, 88, [("B88:C88", "Case"), ("D88", "Description"), ("E88", "N* (kN)"), ("F88", "M* span (kNm)"), ("G88", "M* top (kNm)"),
-                          ("H88", "V* (kN)"), ("I88", "Δ1 SLS (mm)")])
-    MAN0 = 89
+    heading(ws, 102, f"Manual Design Actions per Strip (RFEM) – used when Design actions = {MANUAL}")
+    note(ws, 103, "N* compression + at the critical section; M* + = inside face in tension. M* top = end moment at the top support. Δ1 = first-order SLS deflection, mm.")
+    table_header(ws, 104, [("B104:C104", "Case"), ("D104", "Description"), ("E104", "N* (kN)"), ("F104", "M* span (kNm)"), ("G104", "M* top (kNm)"),
+                          ("H104", "V* (kN)"), ("I104", "Δ1 SLS (mm)")])
+    MAN0 = 105
     for i in range(NLC + 1):
         r = MAN0 + i; mv = d.get("manual", {}).get(i)
         ws.merge_cells(f"B{r}:C{r}"); F(f"B{r}", f"=$B${LC0 + i}"); ws[f"B{r}"].font = font(8); ws[f"B{r}"].alignment = CEN
@@ -202,36 +232,36 @@ def build_tab(name, d):
             if i < NLC and col == "I": continue
             if i == NLC and col in "GH": continue
             IN(f"{col}{r}", mv[j] if mv and j < len(mv) else None, "0.0")
-    note(ws, 96, "Manual mode: the magnifier is applied to M* span unless RFEM already includes 2nd-order effects; top band and reactions come from RFEM.")
+    note(ws, 112, "Manual mode: the magnifier is applied to M* span unless RFEM already includes 2nd-order effects; top band and reactions come from RFEM.")
 
     # ================================================================== CALCULATIONS (page 2 on)
-    r = 98; heading(ws, r, "Strip Properties")
+    r = 114; heading(ws, r, "Strip Properties")
     def prop(rr, s_, ds, f, nf, u, name=None, col="E"):
         sym(rr, s_); desc(rr, ds); CA(f"{col}{rr}", f, nf, name=name); U(f"G{rr}", u)
-    prop(99, "b × tw", "strip section (add-in dims)", "=«b»", "0", "mm", name="dimb"); CA("F99", "=«tw»", "0", name="dimt")
-    prop(100, "Ag", "b tw", "=«b»*«tw»", "0", "mm²", name="Ag")
-    prop(101, "Ig", "b tw³ / 12", "=«b»*«tw»^3/12/1E6", "0.0", "×10⁶ mm⁴", name="Ig")
-    prop(102, "Z", "b tw² / 6", "=«b»*«tw»^2/6/1E6", "0.000", "×10⁶ mm³", name="Zs")
-    prop(103, "r", "0.3 tw (Cl 10.5.2)", "=0.3*«tw»", "0.0", "mm", name="r")
-    prop(104, "Le", "k Hs", "=«k»*«Hs»", "0", "mm", name="Le")
-    prop(105, "Le / r", "slenderness ratio", "=«Le»/«r»", "0.0", "", name="sl")
+    prop(115, "b × tw", "strip section (add-in dims)", "=«b»", "0", "mm", name="dimb"); CA("F115", "=«tw»", "0", name="dimt")
+    prop(116, "Ag", "b tw", "=«b»*«tw»", "0", "mm²", name="Ag")
+    prop(117, "Ig", "b tw³ / 12", "=«b»*«tw»^3/12/1E6", "0.0", "×10⁶ mm⁴", name="Ig")
+    prop(118, "Z", "b tw² / 6", "=«b»*«tw»^2/6/1E6", "0.000", "×10⁶ mm³", name="Zs")
+    prop(119, "r", "0.3 tw (Cl 10.5.2)", "=0.3*«tw»", "0.0", "mm", name="r")
+    prop(120, "Le", "k Hs", "=«k»*«Hs»", "0", "mm", name="Le")
+    prop(121, "Le / r", "slenderness ratio", "=«Le»/«r»", "0.0", "", name="sl")
     I_ = "MIN(MATCH(«fc»,EcFc,1),7)"
-    prop(106, "Ec", '=IF(N(«ecin»)>0,"entered","Table 3.1.2, interpolated")',
+    prop(122, "Ec", '=IF(N(«ecin»)>0,"entered","Table 3.1.2, interpolated")',
          f"=IF(N(«ecin»)>0,«ecin»,INDEX(EcVal,{I_})+(«fc»-INDEX(EcFc,{I_}))*(INDEX(EcVal,{I_}+1)-INDEX(EcVal,{I_}))/(INDEX(EcFc,{I_}+1)-INDEX(EcFc,{I_})))",
          "0", "MPa", name="Ec")
-    prop(107, "f'ct.f", "0.6 √f'c (Cl 3.1.1.3)", "=0.6*SQRT(«fc»)", "0.00", "MPa", name="fctf")
-    prop(108, "gs", "self-weight of strip, ρc tw b", "=«rhoc»*«tw»/1000*«b»/1000", "0.00", "kN/m", name="gs")
-    prop(109, "L", "Hs", "=«Hs»/1000", "0.000", "m", name="Lm")
-    prop(110, "d", '=IF(«TWO»,"tw − cover − db/2 (inside layer)","tw / 2 (central layer)")',
+    prop(123, "f'ct.f", "0.6 √f'c (Cl 3.1.1.3)", "=0.6*SQRT(«fc»)", "0.00", "MPa", name="fctf")
+    prop(124, "gs", "self-weight of strip, ρc tw b", "=«rhoc»*«tw»/1000*«b»/1000", "0.00", "kN/m", name="gs")
+    prop(125, "L", "Hs", "=«Hs»/1000", "0.000", "m", name="Lm")
+    prop(126, "d", '=IF(«TWO»,"tw − cover − db/2 (inside layer)","tw / 2 (central layer)")',
          f'=IF(«TWO»,«tw»-«cover»-IFERROR({barv("«vbar»", 2)},0)/2,«tw»/2)', "0.0", "mm", name="dd")
-    prop(111, "dv", "max(0.72 tw, 0.9 d)", "=MAX(0.72*«tw»,0.9*«dd»)", "0.0", "mm", name="dv")
-    prop(112, "ρv", "vertical, main bars all layers / (1000 tw)",
+    prop(127, "dv", "max(0.72 tw, 0.9 d)", "=MAX(0.72*«tw»,0.9*«dd»)", "0.0", "mm", name="dv")
+    prop(128, "ρv", "vertical, main bars all layers / (1000 tw)",
          f'=IF(«TWO»,2,1)*IFERROR({barv("«vbar»", 3)},0)/(«vs»*«tw»)', "0.000%", "", name="rhov")
-    prop(113, "ρh", "horizontal, main bars all layers / (1000 tw)",
+    prop(129, "ρh", "horizontal, main bars all layers / (1000 tw)",
          f'=IF(«TWO»,2,1)*IFERROR({barv("«hbar»", 3)},0)/(«hs»*«tw»)', "0.000%", "", name="rhoh")
 
     # ---- bar tables for the add-in (not printed, below the print area) - filled in further down
-    SB0 = 262; BB0 = 268
+    SB0 = 278; BB0 = 284
     BARS_S = f"$L${SB0}:$P${SB0 + 3}"; CLS_S = f"$Q${SB0}:$Q${SB0 + 3}"
     BARS_B = f"$L${BB0}:$P${BB0 + 3}"; CLS_B = f"$Q${BB0}:$Q${BB0 + 3}"
     SEC_S = '"Rect",«dimb»:«dimt»'
@@ -239,15 +269,15 @@ def build_tab(name, d):
     MOD = '«fc»,«model»'
     def idx(expr, k): return f'IFERROR(INDEX({expr},{k},1),{expr})'
 
-    heading(ws, 115, "Axis Properties – strip (OAR Concrete add-in)")
-    note(ws, 116, "OAR.CONCRETE.COLUMNAXIS on the strip b × tw: strain compatibility, εcu 0.003; balanced point with the outermost tension bar at yield. Mc = Mub (Cl 10.4.4).")
-    table_header(ws, 117, [("E117", "+M inside face in tension"), ("F117", "−M outside face in tension")])
-    ws.row_dimensions[117].height = 24
+    heading(ws, 131, "Axis Properties – strip (OAR Concrete add-in)")
+    note(ws, 132, "OAR.CONCRETE.COLUMNAXIS on the strip b × tw: strain compatibility, εcu 0.003; balanced point with the outermost tension bar at yield. Mc = Mub (Cl 10.4.4).")
+    table_header(ws, 133, [("E133", "+M inside face in tension"), ("F133", "−M outside face in tension")])
+    ws.row_dimensions[133].height = 24
     AX = [("Nuo", "squash load", "0", "kN"), ("Nuot", "pure tension", "0", "kN"), ("Nub", "balanced point", "0", "kN"),
           ("Mub", "moment at Nub (Mc)", "0.00", "kNm"), ("Muo", "pure bending", "0.00", "kNm"), ("kuo", "at pure bending", "0.000", ""),
           ("φb", "Tbl 2.2.2, pure bending", "0.000", ""), ("do", "to outermost tension bar", "0.0", "mm"),
           ("Nud", "decompression (dn = do)", "0", "kN"), ("Mud", "moment at Nud", "0.00", "kNm"), ("φt", "Tbl 2.2.2, pure tension", "0.000", "")]
-    AX0 = 118
+    AX0 = 134
     for i, (s_, ds, nf, u) in enumerate(AX):
         rr = AX0 + i; sym(rr, s_); desc(rr, ds); calc(ws, f"E{rr}", None, nf); calc(ws, f"F{rr}", None, nf); U(f"G{rr}", u)
     AX1 = AX0 + len(AX) - 1
@@ -256,13 +286,13 @@ def build_tab(name, d):
         for kk, n_ in enumerate(["Nuo", "Nuot", "Nub", "Mub", "Muo", "kuo", "phib", "do", "Nud", "Mud", "phit"]): nm(f"{n_}{sfx}", f"{col}{AX0 + kk}")
 
     # ---- first-order actions
-    heading(ws, 130, "First-order Actions per Strip (pinned base, pinned top support)")
-    note(ws, 131, "x up from the base, L = Hs. w = p bt; top end moment M*T = −pp bt hp²/2 − P roof e (inside face compression −). M(x) = w x (L − x)/2 + M*T x/L.")
-    note(ws, 132, "P top = P roof + γG (G head + parapet self-weight). N*(x) = P top + γG gs (L − x). Critical x: max |M| (x = L if the end moment governs).")
-    table_header(ws, 133, [("B133:C133", "Case"), ("D133", "w (kN/m)"), ("E133", "P roof (kN)"), ("F133", "P top (kN)"), ("G133", "M*T (kNm)"),
-                           ("H133", "x crit (m)"), ("I133", "M2* (kNm)"), ("J133", "N* at x (kN)"), ("K133", "V* (kN)")])
-    grey_hdr("L133", "x0 (m)"); grey_hdr("M133", "M(x0)"); grey_hdr("N133", "R base"); grey_hdr("O133", "R top")
-    ACT0 = 134
+    heading(ws, 146, "First-order Actions per Strip (pinned base, pinned top support)")
+    note(ws, 147, "x up from the base, L = Hs. w = p bt; top end moment M*T = −pp bt hp²/2 − P roof e (inside face compression −). M(x) = w x (L − x)/2 + M*T x/L.")
+    note(ws, 148, "P top = P roof + γG (G head + parapet self-weight). N*(x) = P top + γG gs (L − x). Critical x: max |M| (x = L if the end moment governs).")
+    table_header(ws, 149, [("B149:C149", "Case"), ("D149", "w (kN/m)"), ("E149", "P roof (kN)"), ("F149", "P top (kN)"), ("G149", "M*T (kNm)"),
+                           ("H149", "x crit (m)"), ("I149", "M2* (kNm)"), ("J149", "N* at x (kN)"), ("K149", "V* (kN)")])
+    grey_hdr("L149", "x0 (m)"); grey_hdr("M149", "M(x0)"); grey_hdr("N149", "R base"); grey_hdr("O149", "R top")
+    ACT0 = 150
     for i in range(NLC + 1):
         ar = ACT0 + i; lr = LC0 + i; blank = f'$E${lr}=""'
         ws.merge_cells(f"B{ar}:C{ar}"); F(f"B{ar}", f"=$B${lr}"); ws[f"B{ar}"].font = font(8); ws[f"B{ar}"].alignment = CEN
@@ -283,20 +313,20 @@ def build_tab(name, d):
     SLSA = ACT0 + NLC
 
     # ---- magnifier
-    heading(ws, 142, "Design Moments – braced moment magnifier (Cl 10.4)")
-    note(ws, 143, "βd = permanent share of N*, or the override (0 if Le/r ≤ 40 and N* ≤ M2*/2D). Nc = π²/Le² × 182 do φ0 Mc / (1 + βd), Mc = Mub. Short only if Le/r ≤ 25 (transverse load, M1*/M2* = −1).")
-    note(ws, 144, "δb = km / (1 − N*/Nc) ≥ 1, km = 1.0 with lateral load (0.6 for the end moment alone). M*d = δb × max(|M2*|, 0.05 tw N*), sign of M2*.")
-    table_header(ws, 145, [("B145:C145", "Case"), ("D145", "N* (kN)"), ("E145", "M2* (kNm)"), ("F145", "βd"), ("G145", "Nc (kN)"),
-                           ("H145", "δb"), ("I145", "0.05 tw N*"), ("J145", "M*d (kNm)"), ("K145", "source")])
-    MAG0 = 146
+    heading(ws, 158, "Design Moments – braced moment magnifier (Cl 10.4)")
+    note(ws, 159, "βd = permanent share of M2* (roof G × e at x; 0 when it opposes M2*), or the override. Nc = π²/Le² × 182 do φ0 Mc / (1 + βd), Mc = Mub. Short only if Le/r ≤ 25 (transverse load, M1*/M2* = −1).")
+    note(ws, 160, "δb = km / (1 − N*/Nc) ≥ 1, km = 1.0 with lateral load (0.6 for the end moment alone). M*d = δb × max(|M2*|, 0.05 tw N*), sign of M2*.")
+    table_header(ws, 161, [("B161:C161", "Case"), ("D161", "N* (kN)"), ("E161", "M2* (kNm)"), ("F161", "βd"), ("G161", "Nc (kN)"),
+                           ("H161", "δb"), ("I161", "0.05 tw N*"), ("J161", "M*d (kNm)"), ("K161", "source")])
+    MAG0 = 162
     for i in range(NLC):
         gr = MAG0 + i; lr = LC0 + i; ar = ACT0 + i; mr = MAN0 + i; blank = f'$E${lr}=""'
         ws.merge_cells(f"B{gr}:C{gr}"); F(f"B{gr}", f"=$B${lr}"); ws[f"B{gr}"].font = font(8); ws[f"B{gr}"].alignment = CEN
         CA(f"D{gr}", f'=IF({blank},"",IF(«MAN»,N($E${mr}),J{ar}))', "0.0")
         CA(f"E{gr}", f'=IF({blank},"",IF(«MAN»,N($F${mr}),I{ar}))', "0.00")
         xg = f"IF(«MAN»,«Lm»/2,H{ar})"
-        perm = f"N($E${lr})*(«Gr»*«br»/1000+N(«gadd»)+«gs»*(N(«hp»)/1000+«Lm»-{xg}))"
-        CA(f"F{gr}", f'=IF({blank},"",IF(OR(D{gr}<=0,AND(«sl»<=40,D{gr}<=ABS(E{gr})/(2*«tw»/1000))),0,IF(«bdin»<>"",«bdin»,MIN(1,MAX(0,{perm}/D{gr})))))', "0.00")
+        mperm = f"(-N($E${lr})*«Gr»*«br»/1000*N(«ecc»)/1000*{xg}/«Lm»)"
+        CA(f"F{gr}", f'=IF({blank},"",IF(OR(D{gr}<=0,E{gr}=0,AND(«sl»<=40,D{gr}<=ABS(E{gr})/(2*«tw»/1000))),0,IF(«bdin»<>"",«bdin»,MIN(1,MAX(0,{mperm}*SIGN(E{gr})/ABS(E{gr}))))))', "0.00")
         CA(f"G{gr}", f'=IF({blank},"",PI()^2/«Le»^2*182*IF(E{gr}>=0,«dop»,«don»)*«phi0»*IF(E{gr}>=0,«Mubp»,«Mubn»)*1E6/(1+F{gr})/1000)', "0")
         km = f"IF(AND(NOT(«MAN»),N($H${lr})=0),0.6,1)"
         CA(f"H{gr}", f'=IF({blank},"",IF(OR(D{gr}<=0,AND(«MAN»,«rfem2»="Yes"),«sl»<=25),1,IF(D{gr}>=G{gr},99,MAX(1,{km}/(1-D{gr}/G{gr})))))', "0.00")
@@ -306,7 +336,7 @@ def build_tab(name, d):
 
     # ---- capacity at the critical section
     COLS = "EFGHIJ"
-    CP = 153
+    CP = 169
     heading(ws, CP, "Strength at the Critical Section – strain compatibility (OAR Concrete add-in)")
     note(ws, CP + 1, "OAR.CONCRETE.COLUMN on the strip at N*, M*d: φ from Tbl 2.2.2 (φ0 … φb by N*/Nub; any Class L bar → φb 0.65). Capacity table for each load case.")
     h = CP + 2
@@ -583,39 +613,35 @@ def build_tab(name, d):
     for rr in range(15, LAST + 1):
         if ws.row_dimensions[rr].height is None: ws.row_dimensions[rr].height = 14
     ws.print_area = f"A1:K{LAST}"
-    for b_ in (58, 97, CP - 1, SD - 1): ws.row_breaks.append(Break(id=b_))
+    for b_ in (58, 113, CP - 1, SD - 1): ws.row_breaks.append(Break(id=b_))
     return ws
 
 
 # ---------------- examples ----------------
 # Load cases: (description, γG, γQ/ψ, γ roof Wu, p panel kPa, p parapet kPa); last row = SLS.
+SLS_P = "=IF(ABS(«pins»)>=ABS(«pouts»),«pins»,«pouts»)"
+SLS_PP = "=IF(ABS(«pins»)>=ABS(«pouts»),«ppins»,«ppouts»)"
 WIND_LCS = [("1.2G + 1.5Q", 1.2, 1.5, 0, 0, 0),
-            ("1.2G + Wu inward", 1.2, 0, 0, 1.10, 1.80),
-            ("0.9G + Wu inward + roof uplift", 0.9, 0, 1, 1.10, 1.80),
-            ("0.9G + Wu outward + roof uplift", 0.9, 0, 1, -1.20, -1.80),
-            ("1.2G + Wu outward", 1.2, 0, 0, -1.20, -1.80),
-            ("G + 0.3Q + Eu (face load)", 1.0, 0.3, 0, "=pE", "=pE"),
-            ("G + ψs Q + Ws", 1.0, 0.7, 0, -0.80, -1.20)]
-p1 = dict(loc="Typical solid panel – 9.0 m span, 0.9 m parapet", tw=200, fc=32, Hs=9000, hp=900, W=6000, top=TOP_OPTS[0],
+            ("1.2G + Wu inward", 1.2, 0, 0, "=«pinu»", "=«ppinu»"),
+            ("0.9G + Wu inward + roof uplift", 0.9, 0, 1, "=«pinu»", "=«ppinu»"),
+            ("0.9G + Wu outward + roof uplift", 0.9, 0, 1, "=«poutu»", "=«ppoutu»"),
+            ("1.2G + Wu outward", 1.2, 0, 0, "=«poutu»", "=«ppoutu»"),
+            ("G + 0.3Q + Eu (face load)", 1.0, 0.3, 0, "=«pE»", "=«pE»"),
+            ("G + ψs Q + Ws", 1.0, 0.7, 0, SLS_P, SLS_PP)]
+WIND = dict(qzu=1.2, qzs=0.6)
+p1 = dict(**WIND, loc="Typical solid panel – 9.0 m span, 0.9 m parapet", tw=200, fc=32, Hs=9000, hp=900, W=6000, top=TOP_OPTS[0],
           strip="Solid panel", b=1000, bt=1000, br=1000, gadd=0, lay="Central", vbar="N16", vs=200, hbar="N10", hs=200,
           Gr=2.5, Qr=1.2, Wr=-3.0, ecc=150, ceq=0.15, lcs=WIND_LCS)
-p2 = dict(loc="Jamb strip beside a 4.0 m roller door", tw=200, fc=32, Hs=9000, hp=900, W=6000, top=TOP_OPTS[0],
+p2 = dict(**WIND, loc="Jamb strip beside a 4.0 m roller door", tw=200, fc=32, Hs=9000, hp=900, W=6000, top=TOP_OPTS[0],
           strip="Jamb strip – 4 m roller door", b=1200, bt=3200, br=3200, gadd=13.5, lay="Two layers", cover=40,
           vbar="N12", vs=200, hbar="N12", hs=200, xbar="N20", xs=400, Gr=2.5, Qr=1.2, Wr=-3.0, ecc=150, ceq=0.15, lcs=WIND_LCS)
-p3 = dict(loc="Solid panel – top supported at the panel joints only (rafters)", tw=200, fc=32, Hs=9000, hp=0, W=6000, top=TOP_OPTS[1], hb=1200,
+p3 = dict(**WIND, loc="Solid panel – top supported at the panel joints only (rafters)", tw=200, fc=32, Hs=9000, hp=0, W=6000, top=TOP_OPTS[1], hb=1200,
           strip="Solid panel", b=1000, bt=1000, br=1000, gadd=0, lay="Central", vbar="N16", vs=200, hbar="N12", hs=200, hbbar="N16", hbs=400,
           Gr=2.5, Qr=1.2, Wr=-3.0, ecc=150, ceq=0.15, lcs=WIND_LCS)
 
 
-def fix_pe_refs(ws):
-    """Load-case pressure cells given as '=pE' in the example data point at the tab's pE cell."""
-    for row in ws.iter_rows(min_row=76, max_row=82, min_col=8, max_col=9):
-        for c in row:
-            if c.value == "=pE": c.value = "=$H$73"
-
-
 if __name__ == "__main__":
-    for nm_, dd in (("P1", p1), ("P2", p2), ("P3", p3)): fix_pe_refs(build_tab(nm_, dd))
+    for nm_, dd in (("P1", p1), ("P2", p2), ("P3", p3)): build_tab(nm_, dd)
     wb._sheets = [wb[n] for n in ("P1", "P2", "P3", "Bars")]
     wb.active = 0
     from openpyxl.workbook.properties import CalcProperties
