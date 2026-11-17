@@ -23,7 +23,7 @@
    - `Add-Ins\OAR Concrete\OAR.Concrete-AddIn64.xll` / `OAR.Concrete-AddIn32.xll` – packed add-ins
    - `Add-Ins\OAR Concrete\Releases\v<version>\` – archive copy of this version's add-ins
    - `Add-Ins\OAR Concrete\` also holds the changelog, release notes and the old installer (now a forwarder, below)
-   - `Calc Templates\OAR - RC Flexural Design.xlsx`, `OAR - RC Column Design.xlsx` – the calc templates
+   - `Calc Templates\OAR - RC Flexural Design.xlsx`, `OAR - RC Column Design.xlsx`, `OAR - Tilt Panel Design.xlsx` – the calc templates
 
 Staff pick up the new version at their next Excel start.
 

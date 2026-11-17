@@ -14,8 +14,8 @@ biaxial bending): see *Groundwork for the column sheet* below.
 | `src/OAR.Concrete.Core` | Section engine (F#, netstandard2.0). No Excel code. |
 | `src/OAR.Concrete.Excel` | Excel-DNA add-in (net48): converts sheet ranges to the engine and back. One .xll per bitness. |
 | `tests/OAR.Concrete.Tests` | Benchmark tests (plain console runner): closed-form cases, `tools/reference_check.py`, Brent's pile script. |
-| `tools/` | `reference_check.py` – independent scipy re-implementation used to produce benchmark values; `Circular_Pile_AS3600.py` – Brent's original pile script (curvilinear benchmark). |
-| `template/` | `OAR - RC Flexural Design.xlsx` and `OAR - RC Column Design.xlsx`, with the scripts that build them (`build_template.py`, `build_column_template.py`, shared style in `oar_style.py`). |
+| `tools/` | `reference_check.py` – independent scipy re-implementation used to produce benchmark values; `Circular_Pile_AS3600.py` – Brent's original pile script (curvilinear benchmark); `check_panel_template.py` – LibreOffice check of the tilt panel sheet. |
+| `template/` | `OAR - RC Flexural Design.xlsx`, `OAR - RC Column Design.xlsx` and `OAR - Tilt Panel Design.xlsx`, with the scripts that build them (`build_template.py`, `build_column_template.py`, `build_panel_template.py`, shared style in `oar_style.py`). |
 | `deploy/` | `Install-OARConcrete.cmd/.ps1` – old installer, now only forwards to the OAR Loader's installer (`..\OAR Loader\Install-OARAddins.cmd`). |
 
 ## How the engine works (in plain terms)
@@ -110,6 +110,33 @@ the add-in and restart Excel") and the status box shows **UPDATE ADD-IN** on scr
   Bar spacing ≤ 300 (beam) or
   min(2D, 300) (slab); slab shrinkage & temperature steel as the previous OAR slab sheet.
 
+### The tilt panel calc tab
+
+One tab per panel or design strip; in-service only (lifting and bracing by the contractor's lifting designer).
+All statics and code checks are worksheet formulas; the add-in gives the strip's axis properties (`COLUMNAXIS`, ±M),
+the capacity at N* (`COLUMN`), the top-band capacity (`ULT`) and Icr (`CRACKED`).
+
+- **Strip**: solid panel (b = 1000, bt = br = 1000) or jamb strip (b = jamb width; wind tributary bt = b + half of
+  each adjacent opening; roof tributary br; G at head = lintel / panel over the opening, applied at the top support).
+- **Supports**: base pinned; top continuous (wind beam / raking angle) or *At panel joints (rafters)*. Parapet hp
+  above the top support. k on Hs (default 1.0).
+- **Statics** (x up from the base, L = Hs, + = inside face in tension, pressure + inward):
+  w = p bt; M*T = −pp bt hp²/2 − P roof e; M(x) = w x (L − x)/2 + M*T x/L; critical x at max |M| (the top if the
+  end moment governs); N*(x) = P top + γG gs (L − x); R base = wL/2 + M*T/L, R top = wL/2 − M*T/L + pp bt hp.
+- **Magnifier (Cl 10.4)**: βd = γG × (permanent axial) / N* (override available), Nc = π²/Le² × 182 do φ0 Mub/(1 + βd)
+  for the bending direction, km = 1.0 with lateral load (0.6 for the end moment alone), short only if Le/r ≤ 25,
+  M*d = δb max(|M2*|, 0.05 tw N*). δb shows 99 (unstable) when N* ≥ Nc.
+- **Top band** (joints only): band hb × tw, horizontal bars within hb, M* = q W²/8 with q = R top per metre;
+  deflection 5 q W⁴/(384 Ec Ief) added at mid-height as Δb/2. Approximate – use *Manual (RFEM)* for anything unusual.
+- **SLS**: Δ1 = (5 w L⁴/384 + M*T L²/16)/(Ec Ief), Ief per Cl 8.5.3.1 (Ief.max 0.6 Ig if ρ < 0.005), Mcr = Z(f'ct.f − σcs + Ns/Ag),
+  Δ = Δ1/(1 − Ns/Ncr).
+- **Manual (RFEM)**: N*, M* span, M* top, V* per case and Δ1 for SLS; "RFEM includes 2nd-order effects = Yes" sets δb = 1.
+
+Example tabs (all PASS): **P1** 200 solid, central N16 @ 200, 9.0 m + 0.9 m parapet (governs ρh 75 %, LC5 N–M 69 %,
+δb 2.31); **P2** jamb strip b 1200 beside a 4 m roller door, two layers N12 @ 200 + 3 N20 EF (LC5 56 %);
+**P3** as P1 without parapet, top at the joints only, 3 N16 in a 1200 band (LC5 59 %, band 51 %).
+`python tools/check_panel_template.py` confirms every case against an independent calc (needs LibreOffice).
+
 ## Checking the template in Excel
 
 With the add-in loaded the example tabs should read:
@@ -146,6 +173,9 @@ Key values (engine = `tools/reference_check.py` to 4 figures): S1 Muo 32.73 / 56
 - **Shrinkage steel** uses the previous sheet's interpolation on b D (the old sheet used b d).
 - **Squash load**: RAM Concept uses gross Ac (Nuo = α1 f'c Ag + fsy As); the engine deducts the bar area. The column sheet
   uses the net area (slightly conservative, about 1 % on Nuo at 2 % steel).
+- **Tilt panels**: AS 3600 clause numbers for wall reinforcement (Cl 11.7.1–11.7.3), the shear kv and the Le/r > 120
+  flag are as understood – confirm. With βd = 1 (wind cases, all axial permanent) Nc is low and δb 2–3.5 is normal for
+  9 m panels; the βd override is there if the office view differs.
 - **φ0 for compression members**: Amdt 2 gives φ0 = 0.65 kφ; the column sheet takes φ0 as an input (default 0.60).
   Confirm the kφ value you want as the office default.
 - Not covered: shear, torsion, deflection, detailing.
