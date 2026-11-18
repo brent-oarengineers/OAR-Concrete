@@ -115,8 +115,8 @@ the add-in and restart Excel") and the status box shows **UPDATE ADD-IN** on scr
 One tab per panel (or panel zone); in-service only (lifting and bracing by the contractor's lifting designer).
 The analysis is done in RFEM; the sheet does the AS 3600 member checks per metre width.
 
-- **Inputs from RFEM** per ULS combination (6 rows): N*, Wood–Armer M*y in the span, M*y at the top support
-  (parapet / bracket), M*x, V*, and βd (permanent share of N*, Cl 10.4.3). SLS: Ns, Ms and the maximum deflection.
+- **Inputs from RFEM** – one governing ULS combination: N*, Wood–Armer M*y in the span, M*y at the top support
+  (parapet / bracket), M*x, V*, and βd (permanent share of N*, Cl 10.4.3); one SLS: Ns, Ms and the maximum deflection.
 - **Screenshots**: frames to the right (M:T) for the RFEM ULS and SLS plate results, printed as extra pages.
 - **Slenderness**: braced moment magnifier (Cl 10.4) on M*y span – Nc = π²/Le² × 182 do φ0 Mub/(1 + βd), km = 1.0,
   M*d = δb max(|M*y|, 0.05 tw N*). "RFEM ULS moments are: Second order" sets δb = 1 – only valid if RFEM used

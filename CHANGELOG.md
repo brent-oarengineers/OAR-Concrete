@@ -5,8 +5,8 @@ The calc sheet shows the version it was calculated with (under the green title b
 
 ## v0.6.1
 - **Tilt panel template reworked around RFEM.** The sheet no longer derives actions (wind / roof load statics,
-  reactions and the top band are removed): N*, Wood–Armer M*y (span and top support), M*x, V* and βd per ULS
-  combination, and the SLS N, M and deflection, are entered from RFEM, per metre. Frames on the right take
+  reactions and the top band are removed): N*, Wood–Armer M*y (span and top support), M*x, V* and βd for the governing
+  ULS combination, and the SLS N, M and deflection, are entered from RFEM, per metre (one ULS and one SLS case). Frames on the right take
   screenshots of the RFEM ULS and SLS plate results and print with the calc.
 - Checks: AS 3600 moment magnifier on M*y span (or δb = 1 when the RFEM moments are flagged second order), vertical
   φMu at N*, top-support moment, horizontal M*x against the horizontal bars (new), shear, SLS deflection (RFEM

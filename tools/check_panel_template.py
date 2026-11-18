@@ -125,7 +125,7 @@ def stub_values(wsF, wsV):
             A = num(wsV[f"L{r}"].value) or 0
             if A > 0: rows.append((A, num(wsV[f"M{r}"].value), num(wsV[f"N{r}"].value), num(wsV[f"P{r}"].value) or ES, wsV[f"Q{r}"].value or "N"))
         return rows
-    fc = num(wsV["E35"].value); phi0 = num(wsV["E38"].value); ec = None
+    fc = num(wsV["E30"].value); phi0 = num(wsV["E33"].value); ec = None
     for row in wsF.iter_rows():
         for c in row:
             f = c.value.text if isinstance(c.value, ArrayFormula) else c.value
@@ -134,7 +134,7 @@ def stub_values(wsF, wsV):
             m = re.search(r'"Rect",\$([A-Z])\$(\d+):\$([A-Z])\$(\d+),\$L\$(\d+)', f)
             b = num(wsV[f"{m.group(1)}{m.group(2)}"].value); D = num(wsV[f"{m.group(3)}{m.group(4)}"].value)
             bs = bars(int(m.group(5)))
-            if ec is None: ec = num(wsV["E78"].value)
+            if ec is None: ec = num(wsV["E68"].value)
             ref = c.coordinate
             col, row_ = re.match(r"([A-Z]+)(\d+)", ref).groups(); row_ = int(row_)
             if "COLUMNAXIS(" in f:
@@ -193,9 +193,9 @@ def run_stubbed(template, iters=4):
 # ------------------------------------------------------------------ independent member checks from the inputs
 def panel(ws):
     g = lambda r: ws[r].value
-    tw, fc, phi0, Hs, k = g("E34"), g("E35"), g("E38"), g("E40"), g("E41")
-    second = str(g("E39")).startswith("Second")
-    Ec = g("E78")
+    tw, fc, phi0, Hs, k = g("E29"), g("E30"), g("E33"), g("E35"), g("E36")
+    second = str(g("E34")).startswith("Second")
+    Ec = g("E68")
     def rows(r0):
         out = []
         for r in range(r0, r0 + 4):
@@ -203,13 +203,13 @@ def panel(ws):
             if A > 0: out.append((A, g(f"M{r}"), g(f"N{r}"), g(f"P{r}"), g(f"Q{r}")))
         return out
     bars, hbars = rows(250), rows(256)
-    two = g("E44") == "Two layers"
+    two = g("E39") == "Two layers"
     Le = k * Hs; sl = Le / (0.3 * tw)
     axp, axn = axis(1000, tw, bars, fc, True), axis(1000, tw, bars, fc, False)
     hx = {True: ult0(1000, tw, hbars, fc, True), False: ult0(1000, tw, hbars, fc, False)}
     out = {"cases": []}
-    for i in range(6):
-        lr = 55 + i
+    for i in range(1):
+        lr = 50 + i
         N_ = g(f"E{lr}")
         if N_ in (None, ""): out["cases"].append(None); continue
         M2 = g(f"F{lr}") or 0; MT = g(f"G{lr}") or 0; Mx = g(f"H{lr}"); bdin = g(f"J{lr}") or 0
@@ -225,20 +225,20 @@ def panel(ws):
             mu_x, ph_x = hx[Mx >= 0]; xr = abs(Mx) / (mu_x * ph_x)
         out["cases"].append(dict(Md=abs(Md), db=db, ratio=abs(Md) / pmu, top=top, xr=xr))
     # deflection
-    Ns, Ms, DR = g("E63") or 0, g("F63") or 0, g("E64")
+    Ns, Ms, DR = g("E53") or 0, g("F53") or 0, g("E54")
     if DR not in (None, ""):
         dd = bars[1][1] if two else tw / 2
         Ast = (bars[1][0] + (bars[3][0] if len(bars) > 3 else 0)) if two else sum(t[0] for t in bars)
         Asc = (bars[0][0] + (bars[2][0] if len(bars) > 2 else 0)) if two else 0
         rw, rcw = Ast / (1000 * dd), Asc / (1000 * dd)
-        scs = max(0, (2.5 * rw - 0.8 * rcw) / (1 + 50 * rw) * ES * g("E67"))
+        scs = max(0, (2.5 * rw - 0.8 * rcw) / (1 + 50 * rw) * ES * g("E57"))
         Ig = 1000 * tw ** 3 / 12; Z = 1000 * tw ** 2 / 6
         Mcr = max(0, Z * (0.6 * math.sqrt(fc) - scs + Ns * 1000 / (1000 * tw)) / 1e6)
         Imax = (1 if rw >= 0.005 else 0.6) * Ig
         Icr_ = icr(1000, tw, bars, Ec, Ms >= 0) * 1e6 if Ms else None
         Ief = Imax if (Icr_ is None or abs(Ms) <= Mcr) else min(Imax, Icr_ / (1 - (1 - Icr_ / Ig) * (Mcr / Ms) ** 2))
         Ncr = math.pi ** 2 * Ec * Ief / Le ** 2 / 1000
-        out["defl"] = abs(DR) if str(g("E65")).startswith("Final") else abs(DR) * Ig / Ief / (1 - max(0, Ns) / Ncr)
+        out["defl"] = abs(DR) if str(g("E55")).startswith("Final") else abs(DR) * Ig / Ief / (1 - max(0, Ns) / Ncr)
     return out
 
 
@@ -257,13 +257,13 @@ def main():
         for i, c in enumerate(ref["cases"]):
             if c is None: continue
             col = "EFGHIJ"[i]
-            cmp(f"LC{i + 1} |M*d|", ws[f"{col}124"].value, c["Md"])
-            cmp(f"LC{i + 1} δb", ws[f"H{104 + i}"].value, c["db"])
-            cmp(f"LC{i + 1} ratio", ws[f"{col}125"].value, c["ratio"])
-            cmp(f"LC{i + 1} top ratio", ws[f"{col}132"].value, c["top"])
-            cmp(f"LC{i + 1} M*x ratio", ws[f"{col}142"].value, c["xr"])
-        cmp("SLS deflection", ws["E156"].value, ref.get("defl"))
-        for r in range(15, 32):
+            cmp(f"LC{i + 1} |M*d|", ws[f"{col}109"].value, c["Md"])
+            cmp(f"LC{i + 1} δb", ws[f"H{94 + i}"].value, c["db"])
+            cmp(f"LC{i + 1} ratio", ws[f"{col}110"].value, c["ratio"])
+            cmp(f"LC{i + 1} top ratio", ws[f"{col}117"].value, c["top"])
+            cmp(f"LC{i + 1} M*x ratio", ws[f"{col}127"].value, c["xr"])
+        cmp("SLS deflection", ws["E141"].value, ref.get("defl"))
+        for r in range(15, 27):
             print(f"     {str(ws[f'B{r}'].value or ''):<16} {str(ws[f'D{r}'].value or '')[:60]:<60} {ws[f'E{r}'].value!s:>10.8} {ws[f'F{r}'].value!s:>10.8} {ws[f'I{r}'].value!s:>8.6} {ws[f'J{r}'].value}")
     print("ALL OK" if bad == 0 else f"{bad} mismatches")
     return bad
