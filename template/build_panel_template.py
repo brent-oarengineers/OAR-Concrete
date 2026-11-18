@@ -70,6 +70,7 @@ def barv(ref, col): return f"VLOOKUP({ref},{BARTAB},{col},FALSE)"
 NLC = 6
 ORD = ("First order (sheet applies δb)", "Second order (δb = 1)")
 DEFL = ("Linear gross Ig (sheet applies Ief and P-Δ)", "Final (use as entered)")
+XPOS = ("Both faces / with mesh", "Inside face", "Outside face")
 COLS = "EFGHIJ"
 
 
@@ -163,10 +164,12 @@ def build_tab(name, d):
     lab("B45", "Cover to vertical bars (two layers)"); IN("E45", d.get("cover", 40), "0", name="cover"); U("F45", "mm")
     lab("B46", "Vertical bars: bar | spacing (each layer)"); IN("E46", d["vbar"], name="vbar"); IN("F46", d["vs"], "0", name="vs"); U("G46", "mm")
     lab("B47", "Horizontal bars: bar | spacing (each layer)"); IN("E47", d["hbar"], name="hbar"); IN("F47", d["hs"], "0", name="hs"); U("G47", "mm")
-    lab("B48", "Extra vertical bars: bar | spacing (each layer)"); IN("E48", d.get("xbar", "None"), name="xbar"); IN("F48", d.get("xs"), "0", name="xs"); U("G48", "mm")
-    lab("B49", "Extra horizontal bars: bar | spacing (each layer)"); IN("E49", d.get("hxbar", "None"), name="hxbar"); IN("F49", d.get("hxs"), "0", name="hxs"); U("G49", "mm")
+    lab("B48", "Extra vertical bars: bar | spacing | face"); IN("E48", d.get("xbar", "None"), name="xbar"); IN("F48", d.get("xs"), "0", name="xs"); U("G48", "mm")
+    IN("H48:J48", d.get("xpos", XPOS[0]), name="xpos")
+    lab("B49", "Extra horizontal bars: bar | spacing | face"); IN("E49", d.get("hxbar", "None"), name="hxbar"); IN("F49", d.get("hxs"), "0", name="hxs"); U("G49", "mm")
+    IN("H49:J49", d.get("hxpos", XPOS[0]), name="hxpos")
     lab("B50", "Restrained against horizontal shrinkage"); IN("E50", d.get("hrest", "No"), name="hrest"); small("H50", "No = free to move (panel joints)")
-    note(ws, 51, "SL92 = L9-200. Extras (e.g. N12-300 at jambs / top band) count in the capacity – they must be where the peak moment is. Two layers: horizontals inside.")
+    note(ws, 51, "Extras face: central mesh – tied against the inside or outside of the mesh (+M d up, −M d down); two layers – that layer only. Both = with the mesh / each layer.")
 
     heading(ws, 52, "ULS Design Actions from RFEM (per metre)")
     note(ws, 53, "N* + compression. M*y = vertical bending (+ inside face in tension): span, and at the top support. M*x = horizontal bending. βd = permanent share of N* (Cl 10.4.3).")
@@ -355,12 +358,13 @@ def build_tab(name, d):
     lab(f"L{SB0 - 2}", "Add-in bar tables per metre (not printed): As | depth from outside face | fsy | x | Es | class", sz=7, color=GREY, i=True)
     lab(f"S{SB0}", "vertical: main outside/central | main inside | extra outside/central | extra inside", sz=7, color=GREY)
     lab(f"S{BB0}", "horizontal: same order", sz=7, color=GREY)
-    def bar_rows(r0, bar, spacing, xbarref, xspacing, d_out, d_in, xd_out, xd_in):
+    def bar_rows(r0, bar, spacing, xbarref, xspacing, d_out, d_in, xd_out, xd_in, xpos):
         ab = f'IFERROR({barv(bar, 3)},0)'; ax_ = f'IFERROR({barv(xbarref, 3)},0)'
+        # extra outside/central row: two layers → outside layer unless "inside face"; central → always (depth set by face)
         rows = [(f'=IF(N({spacing})>0,{ab}*1000/{spacing},0)', d_out, bar),
                 (f'=IF(AND(«TWO»,N({spacing})>0),{ab}*1000/{spacing},0)', d_in, bar),
-                (f'=IF(N({xspacing})>0,{ax_}*1000/{xspacing},0)', xd_out, xbarref),
-                (f'=IF(AND(«TWO»,N({xspacing})>0),{ax_}*1000/{xspacing},0)', xd_in, xbarref)]
+                (f'=IF(AND(N({xspacing})>0,OR(NOT(«TWO»),{xpos}<>"{XPOS[1]}")),{ax_}*1000/{xspacing},0)', xd_out, xbarref),
+                (f'=IF(AND(«TWO»,N({xspacing})>0,{xpos}<>"{XPOS[2]}"),{ax_}*1000/{xspacing},0)', xd_in, xbarref)]
         for k_, (fa, fd, bref) in enumerate(rows):
             rr = r0 + k_
             for col, f in (("L", fa), ("M", fd), ("N", f'=IFERROR({barv(bref, 4)},500)'), ("P", f'=IFERROR({barv(bref, 6)},200000)'),
@@ -368,18 +372,20 @@ def build_tab(name, d):
                 F(f"{col}{rr}", f); ws[f"{col}{rr}"].font = font(7, color=GREY)
     dbv = f'IFERROR({barv("«vbar»", 2)},0)'; dbh = f'IFERROR({barv("«hbar»", 2)},0)'
     dbx = f'IFERROR({barv("«xbar»", 2)},0)'; dbhx = f'IFERROR({barv("«hxbar»", 2)},0)'
+    # central mesh: extras tied against it on the inside (deeper from the outside face) or the outside
+    def off(xpos, dbm, dbe): return f'IF({xpos}="{XPOS[1]}",1,IF({xpos}="{XPOS[2]}",-1,0))*({dbm}+{dbe})/2'
     bar_rows(SB0, "«vbar»", "«vs»", "«xbar»", "«xs»",
              f"=IF(«TWO»,«cover»+{dbv}/2,«tw»/2)", f"=«tw»-«cover»-{dbv}/2",
-             f"=IF(«TWO»,«cover»+{dbx}/2,«tw»/2)", f"=«tw»-«cover»-{dbx}/2")
+             f"=IF(«TWO»,«cover»+{dbx}/2,«tw»/2+{off('«xpos»', dbv, dbx)})", f"=«tw»-«cover»-{dbx}/2", "«xpos»")
     bar_rows(BB0, "«hbar»", "«hs»", "«hxbar»", "«hxs»",
              f"=IF(«TWO»,«cover»+{dbv}+{dbh}/2,«tw»/2)", f"=«tw»-«cover»-{dbv}-{dbh}/2",
-             f"=IF(«TWO»,«cover»+{dbv}+{dbhx}/2,«tw»/2)", f"=«tw»-«cover»-{dbv}-{dbhx}/2")
+             f"=IF(«TWO»,«cover»+{dbv}+{dbhx}/2,«tw»/2+{off('«hxpos»', dbh, dbhx)})", f"=«tw»-«cover»-{dbv}-{dbhx}/2", "«hxpos»")
 
     # ================================================================== SUMMARY + CHECKS
     heading(ws, 8, "Design Summary")
     lab("B9", "Adopted panel", sz=7, color=GREY); lab("F9", "Max utilisation", sz=7, color=GREY); lab("I9", "Status", sz=7, color=GREY)
     ws.merge_cells("B10:E10"); ws.merge_cells("F10:G10"); ws.merge_cells("I10:K10")
-    reo = ('IF(«TWO»,"2 layers ","central ")&«vbar»&"-"&«vs»&IF(AND(N(«xs»)>0,«xbar»<>"None")," + "&«xbar»&"-"&«xs»&" extra","")&IF(«TWO»," EF","")')
+    reo = ('IF(«TWO»,"2 layers ","central ")&«vbar»&"-"&«vs»&IF(AND(N(«xs»)>0,«xbar»<>"None")," + "&«xbar»&"-"&«xs»&" extra"&IF(«xpos»="Both faces / with mesh",""," ("&IF(«xpos»="Inside face","inside","outside")&")"),"")&IF(«TWO»," EF","")')
     F("B10", f'=«tw»&" thk  ·  "&{reo}&"  ·  f\'c "&«fc»')
     ws["B10"].font = font(12, True, color=GREEN); ws["B10"].alignment = LEFT
     CHK0, CHK1 = 15, 29
@@ -453,7 +459,7 @@ def build_tab(name, d):
         v = DataValidation(type="list", formula1=formula, allow_blank=True); ws.add_data_validation(v)
         for part in ref.split(): v.add(part)
     dvl('"Rectangular,Curvilinear,Parabolic"', "E36"); dvl(f'"{ORD[0]},{ORD[1]}"', "E39"); dvl('"No,Yes"', "E50")
-    dvl('"Central,Two layers"', "E44"); dvl("=BarList", "E46:E49"); dvl(f'"{DEFL[0]},{DEFL[1]}"', "E65")
+    dvl('"Central,Two layers"', "E44"); dvl('"' + ",".join(XPOS) + '"', "H48 H49"); dvl("=BarList", "E46:E49"); dvl(f'"{DEFL[0]},{DEFL[1]}"', "E65")
     f = Fx('NOT(«TWO»)')
     ws.conditional_formatting.add("E45", FormulaRule(formula=[f], fill=PatternFill(bgColor=NA_FILL), font=Font(color=NA_FONT)))
     ws.conditional_formatting.add("B45", FormulaRule(formula=[f], font=Font(color=NA_FONT)))
