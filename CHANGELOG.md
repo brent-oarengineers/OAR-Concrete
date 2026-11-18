@@ -3,6 +3,16 @@
 Each version that reaches `main` is built, tested and published automatically as a GitHub Release.
 The calc sheet shows the version it was calculated with (under the green title bar).
 
+## v0.6.1
+- **Tilt panel template reworked around RFEM.** The sheet no longer derives actions (wind / roof load statics,
+  reactions and the top band are removed): N*, Wood–Armer M*y (span and top support), M*x, V* and βd per ULS
+  combination, and the SLS N, M and deflection, are entered from RFEM, per metre. Frames on the right take
+  screenshots of the RFEM ULS and SLS plate results and print with the calc.
+- Checks: AS 3600 moment magnifier on M*y span (or δb = 1 when the RFEM moments are flagged second order), vertical
+  φMu at N*, top-support moment, horizontal M*x against the horizontal bars (new), shear, SLS deflection (RFEM
+  linear deflection × Ig/Ief, P-Δ), wall reinforcement minimums and spacing.
+- Extra bars entered as bar | spacing (e.g. N12-300), vertical and horizontal.
+
 ## v0.6.0
 - **New template: OAR - Tilt Panel Design.xlsx** – in-service design of tilt-up panels to AS 3600-2018, one tab per
   panel or design strip (solid panel b = 1000, or a jamb strip beside an opening with its own design width, wind and

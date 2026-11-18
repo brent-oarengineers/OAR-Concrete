@@ -125,7 +125,7 @@ def stub_values(wsF, wsV):
             A = num(wsV[f"L{r}"].value) or 0
             if A > 0: rows.append((A, num(wsV[f"M{r}"].value), num(wsV[f"N{r}"].value), num(wsV[f"P{r}"].value) or ES, wsV[f"Q{r}"].value or "N"))
         return rows
-    fc = num(wsV["E37"].value); phi0 = num(wsV["E40"].value); ec = None
+    fc = num(wsV["E35"].value); phi0 = num(wsV["E38"].value); ec = None
     for row in wsF.iter_rows():
         for c in row:
             f = c.value.text if isinstance(c.value, ArrayFormula) else c.value
@@ -134,7 +134,7 @@ def stub_values(wsF, wsV):
             m = re.search(r'"Rect",\$([A-Z])\$(\d+):\$([A-Z])\$(\d+),\$L\$(\d+)', f)
             b = num(wsV[f"{m.group(1)}{m.group(2)}"].value); D = num(wsV[f"{m.group(3)}{m.group(4)}"].value)
             bs = bars(int(m.group(5)))
-            if ec is None: ec = num(wsV["E106"].value)
+            if ec is None: ec = num(wsV["E78"].value)
             ref = c.coordinate
             col, row_ = re.match(r"([A-Z]+)(\d+)", ref).groups(); row_ = int(row_)
             if "COLUMNAXIS(" in f:
@@ -190,105 +190,64 @@ def run_stubbed(template, iters=4):
     return wbV
 
 
-# ------------------------------------------------------------------ independent panel calc from the inputs
+# ------------------------------------------------------------------ independent member checks from the inputs
 def panel(ws):
     g = lambda r: ws[r].value
-    tw, fc, phi0, rho = g("E36"), g("E37"), g("E40"), g("E41")
-    Hs, hp, W, top, hb, k = g("E45"), g("E46") or 0, g("E47"), g("E48"), g("E49"), g("E50")
-    b, bt, br, gadd = g("E54"), g("E55"), g("E56"), g("E57") or 0
-    Gr, Qr, Wr, e, ceq = g("E69"), g("E70"), g("E71"), g("E72") or 0, g("E73") or 0
-    two = g("E60") == "Two layers"; band = top.startswith("At panel joints") and g("E42") != "Manual (RFEM)"
-    Ec = g("E106"); L = Hs / 1000; gs = rho * tw / 1000 * b / 1000
-    bars = []
-    for r in range(262, 266):
-        A = g(f"L{r}") or 0
-        if A > 0: bars.append((A, g(f"M{r}"), g(f"N{r}"), g(f"P{r}"), g(f"Q{r}")))
-    bbars = []
-    for r in range(268, 272):
-        A = g(f"L{r}") or 0
-        if A > 0: bbars.append((A, g(f"M{r}"), g(f"N{r}"), g(f"P{r}"), g(f"Q{r}")))
-    r_ = 0.3 * tw; Le = k * Hs; sl = Le / r_
-    axp, axn = axis(b, tw, bars, fc, True), axis(b, tw, bars, fc, False)
-    res = []
-    pe = ceq * rho * tw / 1000
-    for i in range(7):
-        lr = 76 + i
-        gG = g(f"E{lr}")
-        if gG in (None, ""): res.append(None); continue
-        gQ, gW = g(f"F{lr}") or 0, g(f"G{lr}") or 0
-        p, pp = g(f"H{lr}"), g(f"I{lr}")
-        p = pe if isinstance(p, str) else (p or 0); pp = pe if isinstance(pp, str) else (pp or 0)
-        w = p * bt / 1000; wpp = pp * bt / 1000
-        Proof = (gG * Gr + gQ * Qr + gW * Wr) * br / 1000
-        Ptop = Proof + gG * (gadd + gs * hp / 1000)
-        MT = -wpp * (hp / 1000) ** 2 / 2 - Proof * e / 1000
-        # max |M| by brute force along the span
-        xs = [L * j / 2000 for j in range(2001)]
-        Ms = [w * x * (L - x) / 2 + MT * x / L for x in xs]
-        j = max(range(len(xs)), key=lambda j: abs(Ms[j]))
-        x, M2 = xs[j], Ms[j]
-        Nst = Ptop + gG * gs * (L - x)
-        Rb = w * L / 2 + MT / L; Rt = w * L - Rb + wpp * hp / 1000
-        V = max(abs(Rb), abs(Rb - w * L), abs(wpp * hp / 1000))
-        res.append(dict(w=w, Ptop=Ptop, MT=MT, x=x, M2=M2, N=Nst, gG=gG, p=p, Rb=Rb, Rt=Rt, V=V))
+    tw, fc, phi0, Hs, k = g("E34"), g("E35"), g("E38"), g("E40"), g("E41")
+    second = str(g("E39")).startswith("Second")
+    Ec = g("E78")
+    def rows(r0):
+        out = []
+        for r in range(r0, r0 + 4):
+            A = g(f"L{r}") or 0
+            if A > 0: out.append((A, g(f"M{r}"), g(f"N{r}"), g(f"P{r}"), g(f"Q{r}")))
+        return out
+    bars, hbars = rows(250), rows(256)
+    two = g("E44") == "Two layers"
+    Le = k * Hs; sl = Le / (0.3 * tw)
+    axp, axn = axis(1000, tw, bars, fc, True), axis(1000, tw, bars, fc, False)
+    hx = {True: ult0(1000, tw, hbars, fc, True), False: ult0(1000, tw, hbars, fc, False)}
     out = {"cases": []}
     for i in range(6):
-        c = res[i]
-        if c is None: out["cases"].append(None); continue
-        N_, M2 = c["N"], c["M2"]
-        perm = c["gG"] * (Gr * br / 1000 + gadd + gs * (hp / 1000 + L - c["x"]))
-        bdin = g("E85")
-        bd = 0 if (N_ <= 0 or (sl <= 40 and N_ <= abs(M2) / (2 * tw / 1000))) else (bdin if bdin not in (None, "") else min(1, max(0, perm / N_)))
+        lr = 55 + i
+        N_ = g(f"E{lr}")
+        if N_ in (None, ""): out["cases"].append(None); continue
+        M2 = g(f"F{lr}") or 0; MT = g(f"G{lr}") or 0; Mx = g(f"H{lr}"); bdin = g(f"J{lr}") or 0
+        bd = 0 if (N_ <= 0 or (sl <= 40 and N_ <= abs(M2) / (2 * tw / 1000))) else min(1, max(0, bdin))
         ax = axp if M2 >= 0 else axn
         Nc = math.pi ** 2 / Le ** 2 * 182 * ax["do"] * phi0 * ax["Mub"] * 1e6 / (1 + bd) / 1000
-        km = 0.6 if c["p"] == 0 else 1.0
-        db = 1 if (N_ <= 0 or sl <= 25) else (99 if N_ >= Nc else max(1, km / (1 - N_ / Nc)))
+        db = 1 if (N_ <= 0 or second or sl <= 25) else (99 if N_ >= Nc else max(1, 1 / (1 - N_ / Nc)))
         Md = (-1 if M2 < 0 else 1) * db * max(abs(M2), 0.05 * tw / 1000 * N_)
-        phi, mu, pmu = column(b, tw, bars, fc, N_, Md, phi0)
-        rt = None
-        if abs(c["MT"]) > 0:
-            rt = abs(c["MT"]) / column(b, tw, bars, fc, c["Ptop"], c["MT"], phi0)[2]
-        bandr = None
-        if band:
-            q = c["Rt"] / (bt / 1000); Mb = q * (W / 1000) ** 2 / 8
-            mu_b, ph_b = ult0(hb, tw, bbars, fc, Mb >= 0)
-            bandr = abs(Mb) / (mu_b * ph_b)
-        out["cases"].append(dict(Md=abs(Md), pmu=pmu, ratio=abs(Md) / pmu, db=db, top=rt, band=bandr, V=c["V"], Rt=c["Rt"] / (bt / 1000)))
+        phi, mu, pmu = column(1000, tw, bars, fc, N_, Md, phi0)
+        top = abs(MT) / column(1000, tw, bars, fc, N_, MT, phi0)[2] if MT else None
+        xr = None
+        if Mx not in (None, ""):
+            mu_x, ph_x = hx[Mx >= 0]; xr = abs(Mx) / (mu_x * ph_x)
+        out["cases"].append(dict(Md=abs(Md), db=db, ratio=abs(Md) / pmu, top=top, xr=xr))
     # deflection
-    s = res[6]
-    if s:
+    Ns, Ms, DR = g("E63") or 0, g("F63") or 0, g("E64")
+    if DR not in (None, ""):
         dd = bars[1][1] if two else tw / 2
         Ast = (bars[1][0] + (bars[3][0] if len(bars) > 3 else 0)) if two else sum(t[0] for t in bars)
         Asc = (bars[0][0] + (bars[2][0] if len(bars) > 2 else 0)) if two else 0
-        rw, rcw = Ast / (b * dd), Asc / (b * dd)
-        scs = max(0, (2.5 * rw - 0.8 * rcw) / (1 + 50 * rw) * ES * g("H84"))
-        Ns = s["Ptop"] + s["gG"] * gs * L / 2
-        Ms_ = s["M2"]; Ig = b * tw ** 3 / 12; Z = b * tw ** 2 / 6
-        Mcr = max(0, Z * (0.6 * math.sqrt(fc) - scs + Ns * 1000 / (b * tw)) / 1e6)
+        rw, rcw = Ast / (1000 * dd), Asc / (1000 * dd)
+        scs = max(0, (2.5 * rw - 0.8 * rcw) / (1 + 50 * rw) * ES * g("E67"))
+        Ig = 1000 * tw ** 3 / 12; Z = 1000 * tw ** 2 / 6
+        Mcr = max(0, Z * (0.6 * math.sqrt(fc) - scs + Ns * 1000 / (1000 * tw)) / 1e6)
         Imax = (1 if rw >= 0.005 else 0.6) * Ig
-        Icr_ = icr(b, tw, bars, Ec, Ms_ >= 0) * 1e6
-        Ief = Imax if abs(Ms_) <= Mcr else min(Imax, Icr_ / (1 - (1 - Icr_ / Ig) * (Mcr / Ms_) ** 2))
-        d1 = (5 * s["w"] * Hs ** 4 / 384 + s["MT"] * 1e6 * Hs ** 2 / 16) / (Ec * Ief)
+        Icr_ = icr(1000, tw, bars, Ec, Ms >= 0) * 1e6 if Ms else None
+        Ief = Imax if (Icr_ is None or abs(Ms) <= Mcr) else min(Imax, Icr_ / (1 - (1 - Icr_ / Ig) * (Mcr / Ms) ** 2))
         Ncr = math.pi ** 2 * Ec * Ief / Le ** 2 / 1000
-        d2 = d1 / (1 - max(0, Ns) / Ncr)
-        db_ = 0
-        if band:
-            qs = s["Rt"] / (bt / 1000); Msb = qs * (W / 1000) ** 2 / 8
-            Igb = hb * tw ** 3 / 12; Mcrb = max(0, hb * tw ** 2 / 6 * (0.6 * math.sqrt(fc) - scs) / 1e6)
-            Icrb = icr(hb, tw, bbars, Ec, Msb >= 0) * 1e6
-            Imb = (1 if sum(t[0] for t in bbars) / (hb * dd) >= 0.005 else 0.6) * Igb
-            Iefb = Imb if abs(Msb) <= Mcrb else min(Imb, Icrb / (1 - (1 - Icrb / Igb) * (Mcrb / Msb) ** 2))
-            db_ = 5 * qs * W ** 4 / (384 * Ec * Iefb)
-        out["defl"] = abs(d2) + abs(db_) / 2
+        out["defl"] = abs(DR) if str(g("E65")).startswith("Final") else abs(DR) * Ig / Ief / (1 - max(0, Ns) / Ncr)
     return out
 
 
 def main():
     wb = run_stubbed(TEMPLATE)
     bad = 0
-    def cmp(tab, what, sheet, ref, tol=2e-3):
+    def cmp(what, sheet, ref, tol=2e-3):
         nonlocal bad
-        ok = (sheet is None and ref is None) or (sheet not in (None, "") and ref is not None and abs(sheet - ref) <= tol * max(1, abs(ref)))
+        ok = (sheet in (None, "") and ref is None) or (sheet not in (None, "") and ref is not None and abs(sheet - ref) <= tol * max(1, abs(ref)))
         if not ok: bad += 1
         print(f"  {'ok ' if ok else 'BAD'} {what:<26} sheet {sheet!s:>12.10}   ref {ref!s:>12.10}")
     for tab in [n for n in wb.sheetnames if n != "Bars"]:
@@ -298,15 +257,14 @@ def main():
         for i, c in enumerate(ref["cases"]):
             if c is None: continue
             col = "EFGHIJ"[i]
-            cmp(tab, f"LC{i + 1} |M*d|", ws[f"{col}166"].value, c["Md"])
-            cmp(tab, f"LC{i + 1} δb", ws[f"H{146 + i}"].value, c["db"])
-            cmp(tab, f"LC{i + 1} ratio", ws[f"{col}167"].value, c["ratio"])
-            if c["top"] is not None: cmp(tab, f"LC{i + 1} top ratio", ws[f"{col}174"].value, c["top"])
-            cmp(tab, f"LC{i + 1} V*", ws[f"{col}179"].value, c["V"])
-            if c["band"] is not None: cmp(tab, f"LC{i + 1} band ratio", ws[f"{col}198"].value, c["band"])
-        cmp(tab, "SLS deflection", ws["E217"].value, ref.get("defl"))
-        for r in range(15, 34):
-            print(f"     {str(ws[f'B{r}'].value or ''):<16} {str(ws[f'D{r}'].value or '')[:70]:<70} {ws[f'E{r}'].value!s:>10.8} {ws[f'F{r}'].value!s:>10.8} {ws[f'I{r}'].value!s:>8.6} {ws[f'J{r}'].value}")
+            cmp(f"LC{i + 1} |M*d|", ws[f"{col}124"].value, c["Md"])
+            cmp(f"LC{i + 1} δb", ws[f"H{104 + i}"].value, c["db"])
+            cmp(f"LC{i + 1} ratio", ws[f"{col}125"].value, c["ratio"])
+            cmp(f"LC{i + 1} top ratio", ws[f"{col}132"].value, c["top"])
+            cmp(f"LC{i + 1} M*x ratio", ws[f"{col}142"].value, c["xr"])
+        cmp("SLS deflection", ws["E156"].value, ref.get("defl"))
+        for r in range(15, 32):
+            print(f"     {str(ws[f'B{r}'].value or ''):<16} {str(ws[f'D{r}'].value or '')[:60]:<60} {ws[f'E{r}'].value!s:>10.8} {ws[f'F{r}'].value!s:>10.8} {ws[f'I{r}'].value!s:>8.6} {ws[f'J{r}'].value}")
     print("ALL OK" if bad == 0 else f"{bad} mismatches")
     return bad
 
