@@ -112,33 +112,25 @@ the add-in and restart Excel") and the status box shows **UPDATE ADD-IN** on scr
 
 ### The tilt panel calc tab
 
-One tab per panel or design strip; in-service only (lifting and bracing by the contractor's lifting designer).
-All statics and code checks are worksheet formulas; the add-in gives the strip's axis properties (`COLUMNAXIS`, ±M),
-the capacity at N* (`COLUMN`), the top-band capacity (`ULT`) and Icr (`CRACKED`).
+One tab per panel (or panel zone); in-service only (lifting and bracing by the contractor's lifting designer).
+The analysis is done in RFEM; the sheet does the AS 3600 member checks per metre width.
 
-- **Strip**: solid panel (b = 1000, bt = br = 1000) or jamb strip (b = jamb width; wind tributary bt = b + half of
-  each adjacent opening; roof tributary br; G at head = lintel / panel over the opening, applied at the top support).
-- **Supports**: base pinned; top continuous (wind beam / raking angle) or *At panel joints (rafters)*. Parapet hp
-  above the top support. k on Hs (default 1.0).
-- **Statics** (x up from the base, L = Hs, + = inside face in tension, pressure + inward):
-  w = p bt; M*T = −pp bt hp²/2 − P roof e; M(x) = w x (L − x)/2 + M*T x/L; critical x at max |M| (the top if the
-  end moment governs); N*(x) = P top + γG gs (L − x); R base = wL/2 + M*T/L, R top = wL/2 − M*T/L + pp bt hp.
-- **Wind**: qz ULS / SLS (panel, parapet top) × (Ka Kc,e Kl Cp,e − Kc,i Cp,i) inward and outward; parapet qz,p Cp,n.
-  Load case pressures are formulas to these, overwritable.
-- **Magnifier (Cl 10.4)**: βd = γG × (permanent axial) / N* (override available), Nc = π²/Le² × 182 do φ0 Mub/(1 + βd)
-  for the bending direction, km = 1.0 with lateral load (0.6 for the end moment alone), short only if Le/r ≤ 25,
-  M*d = δb max(|M2*|, 0.05 tw N*). δb shows 99 (unstable) when N* ≥ Nc.
-- **Top band** (joints only): band hb × tw, horizontal bars within hb, M* = q W²/8 with q = R top per metre;
-  deflection 5 q W⁴/(384 Ec Ief) added at mid-height as Δb/2. Approximate – use *Manual (RFEM)* for anything unusual.
-- **SLS**: Δ1 = (5 w L⁴/384 + M*T L²/16)/(Ec Ief), Ief per Cl 8.5.3.1 (Ief.max 0.6 Ig if ρ < 0.005), Mcr = Z(f'ct.f − σcs + Ns/Ag),
-  Δ = Δ1/(1 − Ns/Ncr).
-- **Manual (RFEM)**: N*, M* span, M* top, V* per case and Δ1 for SLS; "RFEM includes 2nd-order effects = Yes" sets δb = 1.
+- **Inputs from RFEM** per ULS combination (6 rows): N*, Wood–Armer M*y in the span, M*y at the top support
+  (parapet / bracket), M*x, V*, and βd (permanent share of N*, Cl 10.4.3). SLS: Ns, Ms and the maximum deflection.
+- **Screenshots**: frames to the right (M:T) for the RFEM ULS and SLS plate results, printed as extra pages.
+- **Slenderness**: braced moment magnifier (Cl 10.4) on M*y span – Nc = π²/Le² × 182 do φ0 Mub/(1 + βd), km = 1.0,
+  M*d = δb max(|M*y|, 0.05 tw N*). "RFEM ULS moments are: Second order" sets δb = 1 – only valid if RFEM used
+  code-consistent (cracked, creep) stiffness; a linear second-order run with gross Ig is not equivalent.
+- **Capacity**: vertical φMu at N* (`COLUMN`, ±M via `COLUMNAXIS`), M*y top not magnified, horizontal M*x against
+  the horizontal bars (`ULT`), shear (Cl 8.2.4.3, no shear reo). Extras (bar-spacing) count in the capacity and
+  must be where the peak moment is.
+- **SLS**: a linear gross-Ig RFEM deflection is scaled by Ig/Ief (Cl 8.5.3.1, Mcr with σcs and Ns/Ag) and
+  amplified by 1/(1 − Ns/Ncr); or use the RFEM deflection as entered.
+- **Detailing**: wall minimums (Cl 11.7) and spacing; Le/r > 120 flagged.
 
-Example tabs (all PASS; qz,u 1.2 kPa, Cp,e +0.7 / −0.65, Cp,i −0.3 / +0.2): **P1** 200 solid, central N16-200,
-9.0 m + 0.9 m parapet (governs ρh 75 %, LC2 N–M 68 %, δb 2.35); **P2** jamb strip b 1200 beside a 4 m roller door, two
-layers N12-200 + N20-400 extra EF (LC2 54 %); **P3** as P1 without parapet, top at the joints only, N16-400 extra in a
-1200 band (LC2 58 %, band 51 %).
-`python tools/check_panel_template.py` confirms every case against an independent calc (needs LibreOffice).
+Example tab P1 (illustrative RFEM results): 180 panel, central N12-200 / N12-250, wind beam at 6.6 m – PASS,
+governs spacing 71 %, LC2 N–M 63 % (δb 1.32). `python tools/check_panel_template.py` confirms every case against
+an independent calc (needs LibreOffice).
 
 ## Checking the template in Excel
 

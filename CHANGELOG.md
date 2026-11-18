@@ -4,13 +4,14 @@ Each version that reaches `main` is built, tested and published automatically as
 The calc sheet shows the version it was calculated with (under the green title bar).
 
 ## v0.6.1
-- Tilt panel template: extra bars are entered as bar | spacing (e.g. N12-300 over the strip width; top band
-  extras over hb) instead of a number of bars; bars shown as N16-200 in the summary.
-- **Wind input block** (AS/NZS 1170.2): qz ULS / SLS for the panel and the parapet top, Cp,e, Cp,i, Ka, Kl, Kc,e,
-  Kc,i for inward and outward, parapet Cp,n. Net p = qz (Ka Kc,e Kl Cp,e − Kc,i Cp,i), pp = qz,p Cp,n; the load
-  case pressures are formulas to these (overwrite to enter a pressure directly), SLS row takes the larger direction.
-- Default load cases: 1.35G replaced by **0.9G + Wu inward + roof uplift**, the least relief from the roof load
-  eccentricity under inward wind (check alongside 1.2G + Wu inward, which has the higher N* and δb).
+- **Tilt panel template reworked around RFEM.** The sheet no longer derives actions (wind / roof load statics,
+  reactions and the top band are removed): N*, Wood–Armer M*y (span and top support), M*x, V* and βd per ULS
+  combination, and the SLS N, M and deflection, are entered from RFEM, per metre. Frames on the right take
+  screenshots of the RFEM ULS and SLS plate results and print with the calc.
+- Checks: AS 3600 moment magnifier on M*y span (or δb = 1 when the RFEM moments are flagged second order), vertical
+  φMu at N*, top-support moment, horizontal M*x against the horizontal bars (new), shear, SLS deflection (RFEM
+  linear deflection × Ig/Ief, P-Δ), wall reinforcement minimums and spacing.
+- Extra bars entered as bar | spacing (e.g. N12-300), vertical and horizontal.
 
 ## v0.6.0
 - **New template: OAR - Tilt Panel Design.xlsx** – in-service design of tilt-up panels to AS 3600-2018, one tab per
