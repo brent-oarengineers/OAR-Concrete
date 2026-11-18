@@ -248,8 +248,7 @@ def panel(ws):
         N_, M2 = c["N"], c["M2"]
         perm = c["gG"] * (Gr * br / 1000 + gadd + gs * (hp / 1000 + L - c["x"]))
         bdin = g("E101")
-        mperm = -c["gG"] * Gr * br / 1000 * e / 1000 * c["x"] / L
-        bd = 0 if (N_ <= 0 or M2 == 0 or (sl <= 40 and N_ <= abs(M2) / (2 * tw / 1000))) else (bdin if bdin not in (None, "") else min(1, max(0, mperm * math.copysign(1, M2) / abs(M2))))
+        bd = 0 if (N_ <= 0 or (sl <= 40 and N_ <= abs(M2) / (2 * tw / 1000))) else (bdin if bdin not in (None, "") else min(1, max(0, perm / N_)))
         ax = axp if M2 >= 0 else axn
         Nc = math.pi ** 2 / Le ** 2 * 182 * ax["do"] * phi0 * ax["Mub"] * 1e6 / (1 + bd) / 1000
         km = 0.6 if c["p"] == 0 else 1.0

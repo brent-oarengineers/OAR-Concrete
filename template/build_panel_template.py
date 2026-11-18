@@ -217,7 +217,7 @@ def build_tab(name, d):
     note(ws, 99, "p = net pressure on the panel, + inward (towards the building); parapet pressure likewise. Blank γG = case not used. SLS row: deflection (ψ on Q).")
     lab("B100", "SLS deflection limit Hs /"); IN("E100", d.get("dlim", 150), "0", name="dlim")
     lab("G100", "ε*cs (Mcr, Cl 8.5.3.1)", al=RIGHT); IN("H100", d.get("ecs", 0.0006), "0.00000", name="ecs")
-    lab("B101", "βd override (blank = permanent share of M2*)"); IN("E101", d.get("bdin"), "0.00", name="bdin"); small("H101", "creep acts on the sustained moment")
+    lab("B101", "βd override (blank = permanent share of N*)"); IN("E101", d.get("bdin"), "0.00", name="bdin"); small("H101", "Cl 10.4.3: G share of N*")
 
     heading(ws, 102, f"Manual Design Actions per Strip (RFEM) – used when Design actions = {MANUAL}")
     note(ws, 103, "N* compression + at the critical section; M* + = inside face in tension. M* top = end moment at the top support. Δ1 = first-order SLS deflection, mm.")
@@ -314,7 +314,7 @@ def build_tab(name, d):
 
     # ---- magnifier
     heading(ws, 158, "Design Moments – braced moment magnifier (Cl 10.4)")
-    note(ws, 159, "βd = permanent share of M2* (roof G × e at x; 0 when it opposes M2*), or the override. Nc = π²/Le² × 182 do φ0 Mc / (1 + βd), Mc = Mub. Short only if Le/r ≤ 25 (transverse load, M1*/M2* = −1).")
+    note(ws, 159, "βd = permanent share of N* (Cl 10.4.3), or the override (0 if Le/r ≤ 40 and N* ≤ M2*/2D). Nc = π²/Le² × 182 do φ0 Mc / (1 + βd), Mc = Mub. Short only if Le/r ≤ 25 (transverse load, M1*/M2* = −1).")
     note(ws, 160, "δb = km / (1 − N*/Nc) ≥ 1, km = 1.0 with lateral load (0.6 for the end moment alone). M*d = δb × max(|M2*|, 0.05 tw N*), sign of M2*.")
     table_header(ws, 161, [("B161:C161", "Case"), ("D161", "N* (kN)"), ("E161", "M2* (kNm)"), ("F161", "βd"), ("G161", "Nc (kN)"),
                            ("H161", "δb"), ("I161", "0.05 tw N*"), ("J161", "M*d (kNm)"), ("K161", "source")])
@@ -325,8 +325,8 @@ def build_tab(name, d):
         CA(f"D{gr}", f'=IF({blank},"",IF(«MAN»,N($E${mr}),J{ar}))', "0.0")
         CA(f"E{gr}", f'=IF({blank},"",IF(«MAN»,N($F${mr}),I{ar}))', "0.00")
         xg = f"IF(«MAN»,«Lm»/2,H{ar})"
-        mperm = f"(-N($E${lr})*«Gr»*«br»/1000*N(«ecc»)/1000*{xg}/«Lm»)"
-        CA(f"F{gr}", f'=IF({blank},"",IF(OR(D{gr}<=0,E{gr}=0,AND(«sl»<=40,D{gr}<=ABS(E{gr})/(2*«tw»/1000))),0,IF(«bdin»<>"",«bdin»,MIN(1,MAX(0,{mperm}*SIGN(E{gr})/ABS(E{gr}))))))', "0.00")
+        perm = f"N($E${lr})*(«Gr»*«br»/1000+N(«gadd»)+«gs»*(N(«hp»)/1000+«Lm»-{xg}))"
+        CA(f"F{gr}", f'=IF({blank},"",IF(OR(D{gr}<=0,AND(«sl»<=40,D{gr}<=ABS(E{gr})/(2*«tw»/1000))),0,IF(«bdin»<>"",«bdin»,MIN(1,MAX(0,{perm}/D{gr})))))', "0.00")
         CA(f"G{gr}", f'=IF({blank},"",PI()^2/«Le»^2*182*IF(E{gr}>=0,«dop»,«don»)*«phi0»*IF(E{gr}>=0,«Mubp»,«Mubn»)*1E6/(1+F{gr})/1000)', "0")
         km = f"IF(AND(NOT(«MAN»),N($H${lr})=0),0.6,1)"
         CA(f"H{gr}", f'=IF({blank},"",IF(OR(D{gr}<=0,AND(«MAN»,«rfem2»="Yes"),«sl»<=25),1,IF(D{gr}>=G{gr},99,MAX(1,{km}/(1-D{gr}/G{gr})))))', "0.00")

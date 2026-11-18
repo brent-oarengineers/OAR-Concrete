@@ -9,9 +9,6 @@ The calc sheet shows the version it was calculated with (under the green title b
 - **Wind input block** (AS/NZS 1170.2): qz ULS / SLS for the panel and the parapet top, Cp,e, Cp,i, Ka, Kl, Kc,e,
   Kc,i for inward and outward, parapet Cp,n. Net p = qz (Ka Kc,e Kl Cp,e − Kc,i Cp,i), pp = qz,p Cp,n; the load
   case pressures are formulas to these (overwrite to enter a pressure directly), SLS row takes the larger direction.
-- **βd = permanent share of M2*** (roof G × e at the critical section, 0 when it opposes M2*) instead of the
-  permanent share of N*: creep acts on the sustained moment, so wind / EQ cases get βd ≈ 0. A departure from the
-  literal Cl 10.4.3 definition (engineer's judgement); the βd override remains. P1 LC2 δb 2.36 → 1.40.
 - Default load cases: 1.35G replaced by **0.9G + Wu inward + roof uplift**, the least relief from the roof load
   eccentricity under inward wind (check alongside 1.2G + Wu inward, which has the higher N* and δb).
 
