@@ -113,24 +113,21 @@ the add-in and restart Excel") and the status box shows **UPDATE ADD-IN** on scr
 ### The tilt panel calc tab
 
 One tab per panel (or panel zone); in-service only (lifting and bracing by the contractor's lifting designer).
-The analysis is done in RFEM; the sheet does the AS 3600 member checks per metre width.
+The analysis is done in any FE package; the sheet does the AS 3600 section checks per metre width.
 
-- **Inputs from RFEM** per ULS combination (6 rows): N*, Wood–Armer M*y in the span, M*y at the top support
-  (parapet / bracket), M*x, V*, and βd (permanent share of N*, Cl 10.4.3). SLS: Ns, Ms and the maximum deflection.
-- **Screenshots**: frames to the right (M:T) for the RFEM ULS and SLS plate results, printed as extra pages.
-- **Slenderness**: braced moment magnifier (Cl 10.4) on M*y span – Nc = π²/Le² × 182 do φ0 Mub/(1 + βd), km = 1.0,
-  M*d = δb max(|M*y|, 0.05 tw N*). "RFEM ULS moments are: Second order" sets δb = 1 – only valid if RFEM used
-  code-consistent (cracked, creep) stiffness; a linear second-order run with gross Ig is not equivalent.
-- **Capacity**: vertical φMu at N* (`COLUMN`, ±M via `COLUMNAXIS`), M*y top not magnified, horizontal M*x against
-  the horizontal bars (`ULT`), shear (Cl 8.2.4.3, no shear reo). Extras (bar-spacing) count in the capacity and
-  must be where the peak moment is.
-- **SLS**: a linear gross-Ig RFEM deflection is scaled by Ig/Ief (Cl 8.5.3.1, Mcr with σcs and Ns/Ag) and
-  amplified by 1/(1 − Ns/Ncr); or use the RFEM deflection as entered.
-- **Detailing**: wall minimums (Cl 11.7) and spacing; Le/r > 120 flagged.
+- **Inputs** per ULS combination (6 rows): N*, second-order M*y in the span, M*y at the support (parapet / bracket)
+  and M*x. SLS: Ns, Ms and the maximum deflection, with the deflection limit in mm.
+- **Screenshots**: frames to the right (M:T) for the ULS and SLS plate results, printed as extra pages.
+- **Moments are second order** from the analysis (stiffness consistent with AS 3600) – no moment magnifier, no span or
+  effective length inputs. M*d = max(|M*y span|, 0.05 tw N*).
+- **Capacity**: vertical φMu at N* (`COLUMN`), M*y at the support, horizontal M*x against the horizontal bars (`ULT`).
+  Extras (bar-spacing, inside / outside face) count in the capacity and must be where the peak moment is.
+- **SLS**: a linear gross-Ig deflection is scaled by Ig/Ief (Cl 8.5.3.1, Mcr with σcs and Ns/Ag), or used as entered.
+- **Detailing**: wall minimums (Cl 11.7) and spacing.
+- Not covered: shear, slenderness (in the analysis), lifting and bracing.
 
-Example tab P1 (illustrative RFEM results): 180 panel, central N12-200 / N12-250, wind beam at 6.6 m – PASS,
-governs spacing 71 %, LC2 N–M 63 % (δb 1.32). `python tools/check_panel_template.py` confirms every case against
-an independent calc (needs LibreOffice).
+Example tab P1 (illustrative results): 180 panel, central N12-200 / N12-250 – PASS, governs spacing 71 %.
+`python tools/check_panel_template.py` confirms every case against an independent calc (needs LibreOffice).
 
 ## Checking the template in Excel
 
@@ -168,9 +165,8 @@ Key values (engine = `tools/reference_check.py` to 4 figures): S1 Muo 32.73 / 56
 - **Shrinkage steel** uses the previous sheet's interpolation on b D (the old sheet used b d).
 - **Squash load**: RAM Concept uses gross Ac (Nuo = α1 f'c Ag + fsy As); the engine deducts the bar area. The column sheet
   uses the net area (slightly conservative, about 1 % on Nuo at 2 % steel).
-- **Tilt panels**: AS 3600 clause numbers for wall reinforcement (Cl 11.7.1–11.7.3), the shear kv and the Le/r > 120
-  flag are as understood – confirm. With βd = 1 (wind cases, all axial permanent) Nc is low and δb 2–3.5 is normal for
-  9 m panels; the βd override is there if the office view differs.
+- **Tilt panels**: AS 3600 clause numbers for wall reinforcement (Cl 11.7.1–11.7.3) are as understood – confirm.
+  Moments are taken as second order from the analysis; the sheet applies no magnifier.
 - **φ0 for compression members**: Amdt 2 gives φ0 = 0.65 kφ; the column sheet takes φ0 as an input (default 0.60).
   Confirm the kφ value you want as the office default.
 - Not covered: shear, torsion, deflection, detailing.

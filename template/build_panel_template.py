@@ -1,18 +1,17 @@
 """Builds template/OAR - Tilt Panel Design.xlsx (OAR house calc style).
 
 Run from the repo root:  python template/build_panel_template.py
-One calc tab = one tilt panel (or panel zone) designed from RFEM plate results. The analysis stays in RFEM: the
-design actions per metre (N*, Wood–Armer M*y span and at the top support, M*x, V*) for each ULS combination and
-the SLS N, M and deflection are entered on the sheet, and screenshots of the RFEM plate moments are pasted into
-the frames on the right (printed as extra pages with the calc).
+One calc tab = one tilt panel (or panel zone). The analysis is done in any FE package: the second-order design
+actions per metre (N*, M*y in the span and at the support, M*x) for each ULS combination and the SLS N, M and
+deflection are entered on the sheet, and screenshots of the plate results are pasted into the frames on the right
+(printed as extra pages with the calc).
 
-The sheet then does the AS 3600-2018 member checks per metre:
-  - slenderness: braced moment magnifier (Cl 10.4) on M*y span, km = 1.0, βd per case (permanent share of N*),
-    Nc from Mc = Mub; δb = 1 when the RFEM moments are flagged as second order;
-  - vertical capacity at N* by strain compatibility (OAR.CONCRETE.COLUMN), top-support moment (not magnified),
-    horizontal M*x against the horizontal bars (OAR.CONCRETE.ULT), shear (Cl 8.2.4.3);
-  - SLS deflection: RFEM linear (gross Ig) deflection scaled by Ig/Ief (Cl 8.5.3.1) and amplified for P-Δ;
-  - wall reinforcement minimums and spacing (Cl 11.7), Le/r flag.
+The sheet then does the AS 3600-2018 section checks per metre:
+  - vertical capacity at N* by strain compatibility (OAR.CONCRETE.COLUMN), M*y span (≥ 0.05 tw N*) and at the
+    support, horizontal M*x against the horizontal bars (OAR.CONCRETE.ULT); moments are taken as second order
+    (no moment magnifier);
+  - SLS deflection: a linear gross-Ig deflection scaled by Ig/Ief (Cl 8.5.3.1), or the value as entered;
+  - wall reinforcement minimums and spacing (Cl 11.7).
 In-service only (lifting and bracing by the contractor's lifting designer). No new engine functions.
 """
 import sys, os, re
@@ -68,8 +67,7 @@ BARTAB = f"Bars!$B${BAR0}:$G${BAR_LAST}"
 def barv(ref, col): return f"VLOOKUP({ref},{BARTAB},{col},FALSE)"
 
 NLC = 6
-ORD = ("First order (sheet applies δb)", "Second order (δb = 1)")
-DEFL = ("Linear gross Ig (sheet applies Ief and P-Δ)", "Final (use as entered)")
+DEFL = ("Linear, gross Ig (sheet applies Ig / Ief)", "Final (use as entered)")
 XPOS = ("Both faces / with mesh", "Inside face", "Outside face")
 COLS = "EFGHIJ"
 
@@ -99,7 +97,7 @@ def build_tab(name, d):
         N[n] = f"${col}${row}"
     def Fx(s):
         if not isinstance(s, str): return s
-        s = s.replace("«TWO»", '«lay»="Two layers"').replace("«O2»", f'«ord»="{ORD[1]}"')
+        s = s.replace("«TWO»", '«lay»="Two layers"')
         for k in sorted(N, key=len, reverse=True): s = s.replace(f"«{k}»", N[k])
         assert "«" not in s, s
         return s
@@ -129,8 +127,8 @@ def build_tab(name, d):
     setup_calc_tab(ws, LOGO, '="TILT PANEL (AS 3600-2018)  –  "&IF(G3="","(ref)",G3)&IF(I3="","","  ·  "&I3)', "PANEL", name, "")
     ws["I3"].value = d["loc"]
     for col, w in zip("LMNOPQRST", (4, 8, 7, 9, 8, 9, 26, 6.5, 6.5)): ws.column_dimensions[col].width = w
-    shot_frame(ws, 8, 50, "RFEM – ULS plate moments (Wood–Armer my, mx) and N", "Paste RFEM ULS plate moment screenshots here")
-    shot_frame(ws, 54, 96, "RFEM – SLS moments and deflection", "Paste RFEM SLS moment / deflection screenshots here")
+    shot_frame(ws, 8, 50, "Analysis – ULS plate moments (second order, my and mx) and N", "Paste the ULS plate moment screenshots here")
+    shot_frame(ws, 54, 96, "Analysis – SLS moments and deflection", "Paste the SLS moment / deflection screenshots here")
 
     # ---- add-in version check (V3:V7, not printed)
     ws.column_dimensions["U"].width = 3; ws.column_dimensions["V"].width = 12
@@ -148,49 +146,46 @@ def build_tab(name, d):
     ws.conditional_formatting.add("B7", FormulaRule(formula=['OR($V$7,$V$4="")'], font=Font(color=RED, bold=True, italic=False)))
 
     # ================================================================== INPUTS
-    heading(ws, 33, "Panel, Concrete and Analysis")
+    heading(ws, 33, "Panel and Concrete")
     lab("B34", "Panel thickness tw"); IN("E34", d["tw"], "0", name="tw"); U("F34", "mm")
     lab("B35", "Concrete strength f'c"); IN("E35", d["fc"], "0", name="fc"); U("F35", "MPa")
     lab("B36", "Stress block (ULS)"); IN("E36:F36", d.get("model", "Rectangular"), name="model")
     lab("B37", "Ec override"); IN("E37", None, "0", name="ecin"); U("F37", "MPa"); small("H37", "blank = Table 3.1.2")
     lab("B38", "φ0 for compression, Table 2.2.2"); IN("E38", d.get("phi0", 0.6), "0.00", name="phi0"); small("H38", "Amdt 2: φ0 = 0.65 kφ – enter the value")
-    lab("B39", "RFEM ULS moments are"); IN("E39:H39", d.get("ord", ORD[0]), al=LEFT, name="ord")
-    lab("B40", "Span Hs, base support to top support"); IN("E40", d["Hs"], "0", name="Hs"); U("F40", "mm")
-    lab("B41", "Effective length factor k"); IN("E41", d.get("k", 1.0), "0.00", name="k"); small("H41", "pinned base and top: 1.0")
-    note(ws, 42, "Design per metre width from RFEM Wood–Armer design moments. RFEM second order counts only with code-consistent (cracked, creep) stiffness.")
+    note(ws, 39, "Design per metre width. ULS moments are second-order design moments from the analysis (stiffness consistent with AS 3600) – no magnifier applied.")
 
-    heading(ws, 43, "Reinforcement")
-    lab("B44", "Layout"); IN("E44:F44", d.get("lay", "Central"), name="lay")
-    lab("B45", "Cover to vertical bars (two layers)"); IN("E45", d.get("cover", 40), "0", name="cover"); U("F45", "mm")
-    lab("B46", "Vertical bars: bar | spacing (each layer)"); IN("E46", d["vbar"], name="vbar"); IN("F46", d["vs"], "0", name="vs"); U("G46", "mm")
-    lab("B47", "Horizontal bars: bar | spacing (each layer)"); IN("E47", d["hbar"], name="hbar"); IN("F47", d["hs"], "0", name="hs"); U("G47", "mm")
-    lab("B48", "Extra vertical bars: bar | spacing | face"); IN("E48", d.get("xbar", "None"), name="xbar"); IN("F48", d.get("xs"), "0", name="xs"); U("G48", "mm")
-    IN("H48:J48", d.get("xpos", XPOS[0]), name="xpos")
-    lab("B49", "Extra horizontal bars: bar | spacing | face"); IN("E49", d.get("hxbar", "None"), name="hxbar"); IN("F49", d.get("hxs"), "0", name="hxs"); U("G49", "mm")
-    IN("H49:J49", d.get("hxpos", XPOS[0]), name="hxpos")
-    lab("B50", "Restrained against horizontal shrinkage"); IN("E50", d.get("hrest", "No"), name="hrest"); small("H50", "No = free to move (panel joints)")
-    note(ws, 51, "Extras face: central mesh – tied against the inside or outside of the mesh (+M d up, −M d down); two layers – that layer only. Both = with the mesh / each layer.")
+    heading(ws, 40, "Reinforcement")
+    lab("B41", "Layout"); IN("E41:F41", d.get("lay", "Central"), name="lay")
+    lab("B42", "Cover to vertical bars (two layers)"); IN("E42", d.get("cover", 40), "0", name="cover"); U("F42", "mm")
+    lab("B43", "Vertical bars: bar | spacing (each layer)"); IN("E43", d["vbar"], name="vbar"); IN("F43", d["vs"], "0", name="vs"); U("G43", "mm")
+    lab("B44", "Horizontal bars: bar | spacing (each layer)"); IN("E44", d["hbar"], name="hbar"); IN("F44", d["hs"], "0", name="hs"); U("G44", "mm")
+    lab("B45", "Extra vertical bars: bar | spacing | face"); IN("E45", d.get("xbar", "None"), name="xbar"); IN("F45", d.get("xs"), "0", name="xs"); U("G45", "mm")
+    IN("H45:J45", d.get("xpos", XPOS[0]), name="xpos")
+    lab("B46", "Extra horizontal bars: bar | spacing | face"); IN("E46", d.get("hxbar", "None"), name="hxbar"); IN("F46", d.get("hxs"), "0", name="hxs"); U("G46", "mm")
+    IN("H46:J46", d.get("hxpos", XPOS[0]), name="hxpos")
+    lab("B47", "Restrained against horizontal shrinkage"); IN("E47", d.get("hrest", "No"), name="hrest"); small("H47", "No = free to move (panel joints)")
+    note(ws, 48, "Extras face: central mesh – tied against the inside or outside of the mesh (+M d up, −M d down); two layers – that layer only. Both = with the mesh / each layer.")
 
-    heading(ws, 52, "ULS Design Actions from RFEM (per metre)")
-    note(ws, 53, "N* + compression. M*y = vertical bending (+ inside face in tension): span, and at the top support. M*x = horizontal bending. βd = permanent share of N* (Cl 10.4.3).")
-    table_header(ws, 54, [("B54:C54", "Case"), ("D54", "Description"), ("E54", "N* (kN/m)"), ("F54", "M*y span"), ("G54", "M*y top"),
-                          ("H54", "M*x (kNm/m)"), ("I54", "V* (kN/m)"), ("J54", "βd")])
+    heading(ws, 52, "ULS Design Actions (second order, per metre)")
+    note(ws, 53, "N* + compression. M*y = vertical bending (+ inside face in tension): in the span, and at the support (e.g. parapet or bracket). M*x = horizontal bending.")
+    table_header(ws, 54, [("B54:C54", "Case"), ("D54", "Description"), ("E54", "N* (kN/m)"), ("F54", "M*y span"), ("G54", "M*y support"),
+                          ("H54", "M*x (kNm/m)")])
     LC0 = 55
     for i in range(NLC):
         r = LC0 + i; lc = d["lcs"][i] if i < len(d["lcs"]) else None
         IN(f"B{r}:C{r}", f"LC{i + 1}")
         IN(f"D{r}", lc[0] if lc else None, al=LEFT)
-        for j, col in enumerate("EFGHIJ"):
+        for j, col in enumerate("EFGH"):
             IN(f"{col}{r}", lc[1 + j] if lc else None, "0.00")
-    note(ws, 61, "Blank N* = case not used. M*y span = peak in the span (magnified); M*y top = peak at / above the top support, e.g. parapet or bracket (not magnified).")
+    note(ws, 61, "Blank N* = case not used. Enter the peak second-order moments; M*y span is taken as at least 0.05 tw N* (Cl 10.1.2).")
 
-    heading(ws, 62, "SLS from RFEM")
+    heading(ws, 62, "SLS from the Analysis")
     lab("B63", "Ns | Ms (SLS combination)"); IN("E63", d.get("Ns"), "0.0", name="Ns"); IN("F63", d.get("Ms"), "0.00", name="Ms"); U("G63", "kN/m | kNm/m")
-    lab("B64", "Max out-of-plane deflection Δ (RFEM)"); IN("E64", d.get("DR"), "0.0", name="DR"); U("F64", "mm")
-    lab("B65", "RFEM deflection is"); IN("E65:H65", d.get("dbasis", DEFL[0]), al=LEFT, name="dbasis")
-    lab("B66", "Deflection limit Hs /"); IN("E66", d.get("dlim", 150), "0", name="dlim")
+    lab("B64", "Max out-of-plane deflection Δ"); IN("E64", d.get("DR"), "0.0", name="DR"); U("F64", "mm")
+    lab("B65", "Deflection is"); IN("E65:H65", d.get("dbasis", DEFL[0]), al=LEFT, name="dbasis")
+    lab("B66", "Deflection limit Δmax"); IN("E66", d.get("dlim", 44), "0.0", name="dlim"); U("F66", "mm"); small("H66", "e.g. span / 150")
     lab("B67", "Design shrinkage strain ε*cs (for Mcr)"); IN("E67", d.get("ecs", 0.0006), "0.00000", name="ecs"); small("H67", "Cl 8.5.3.1")
-    note(ws, 68, "A linear (gross Ig) RFEM deflection is scaled by Ig / Ief and amplified by 1 / (1 − Ns/Ncr). Short-term SLS wind.")
+    note(ws, 68, "A linear gross-Ig deflection is scaled by Ig / Ief (Cl 8.5.3.1); use the second-order deflection from the analysis. Short-term SLS wind.")
 
     # ================================================================== CALCULATIONS
     heading(ws, 70, "Section Properties (per metre)")
@@ -200,19 +195,15 @@ def build_tab(name, d):
     prop(72, "Ag", "b tw", "=1000*«tw»", "0", "mm²", name="Ag")
     prop(73, "Ig", "b tw³ / 12", "=1000*«tw»^3/12/1E6", "0.0", "×10⁶ mm⁴", name="Ig")
     prop(74, "Z", "b tw² / 6", "=1000*«tw»^2/6/1E6", "0.000", "×10⁶ mm³", name="Zs")
-    prop(75, "r", "0.3 tw (Cl 10.5.2)", "=0.3*«tw»", "0.0", "mm", name="r")
-    prop(76, "Le", "k Hs", "=«k»*«Hs»", "0", "mm", name="Le")
-    prop(77, "Le / r", "slenderness ratio", "=«Le»/«r»", "0.0", "", name="sl")
     I_ = "MIN(MATCH(«fc»,EcFc,1),7)"
-    prop(78, "Ec", '=IF(N(«ecin»)>0,"entered","Table 3.1.2, interpolated")',
+    prop(75, "Ec", '=IF(N(«ecin»)>0,"entered","Table 3.1.2, interpolated")',
          f"=IF(N(«ecin»)>0,«ecin»,INDEX(EcVal,{I_})+(«fc»-INDEX(EcFc,{I_}))*(INDEX(EcVal,{I_}+1)-INDEX(EcVal,{I_}))/(INDEX(EcFc,{I_}+1)-INDEX(EcFc,{I_})))",
          "0", "MPa", name="Ec")
-    prop(79, "f'ct.f", "0.6 √f'c (Cl 3.1.1.3)", "=0.6*SQRT(«fc»)", "0.00", "MPa", name="fctf")
-    prop(80, "d", '=IF(«TWO»,"tw − cover − db/2 (inside layer)","tw / 2 (central layer)")',
+    prop(76, "f'ct.f", "0.6 √f'c (Cl 3.1.1.3)", "=0.6*SQRT(«fc»)", "0.00", "MPa", name="fctf")
+    prop(77, "d", '=IF(«TWO»,"tw − cover − db/2 (inside layer)","tw / 2 (central layer)")',
          f'=IF(«TWO»,«tw»-«cover»-IFERROR({barv("«vbar»", 2)},0)/2,«tw»/2)', "0.0", "mm", name="dd")
-    prop(81, "dv", "max(0.72 tw, 0.9 d)", "=MAX(0.72*«tw»,0.9*«dd»)", "0.0", "mm", name="dv")
-    prop(82, "ρv", "vertical, main bars all layers / (1000 tw)", f'=IF(«TWO»,2,1)*IFERROR({barv("«vbar»", 3)},0)/(«vs»*«tw»)', "0.000%", "", name="rhov")
-    prop(83, "ρh", "horizontal, main bars all layers / (1000 tw)", f'=IF(«TWO»,2,1)*IFERROR({barv("«hbar»", 3)},0)/(«hs»*«tw»)', "0.000%", "", name="rhoh")
+    prop(78, "ρv", "vertical, main bars all layers / (1000 tw)", f'=IF(«TWO»,2,1)*IFERROR({barv("«vbar»", 3)},0)/(«vs»*«tw»)', "0.000%", "", name="rhov")
+    prop(79, "ρh", "horizontal, main bars all layers / (1000 tw)", f'=IF(«TWO»,2,1)*IFERROR({barv("«hbar»", 3)},0)/(«hs»*«tw»)', "0.000%", "", name="rhoh")
 
     SB0 = 250; BB0 = 256    # add-in bar tables (below the print area)
     BARS_V = f"$L${SB0}:$P${SB0 + 3}"; CLS_V = f"$Q${SB0}:$Q${SB0 + 3}"
@@ -221,42 +212,21 @@ def build_tab(name, d):
     MOD = '«fc»,«model»'
     def idx(expr, k): return f'IFERROR(INDEX({expr},{k},1),{expr})'
 
-    heading(ws, 85, "Axis Properties – vertical (OAR Concrete add-in)")
-    note(ws, 86, "OAR.CONCRETE.COLUMNAXIS per metre, vertical bars: strain compatibility, εcu 0.003; balanced point with the outermost tension bar at yield. Mc = Mub (Cl 10.4.4).")
-    table_header(ws, 87, [("E87", "+M inside face in tension"), ("F87", "−M outside face in tension")])
-    ws.row_dimensions[87].height = 24
-    AX = [("Nuo", "squash load", "0", "kN"), ("Nuot", "pure tension", "0", "kN"), ("Nub", "balanced point", "0", "kN"),
-          ("Mub", "moment at Nub (Mc)", "0.00", "kNm"), ("Muo", "pure bending", "0.00", "kNm"), ("kuo", "at pure bending", "0.000", ""),
-          ("φb", "Tbl 2.2.2, pure bending", "0.000", ""), ("do", "to outermost tension bar", "0.0", "mm"),
-          ("Nud", "decompression (dn = do)", "0", "kN"), ("Mud", "moment at Nud", "0.00", "kNm"), ("φt", "Tbl 2.2.2, pure tension", "0.000", "")]
-    AX0 = 88
-    for i, (s_, ds, nf, u) in enumerate(AX):
-        rr = AX0 + i; sym(rr, s_); desc(rr, ds); calc(ws, f"E{rr}", None, nf); calc(ws, f"F{rr}", None, nf); U(f"G{rr}", u)
-    AX1 = AX0 + len(AX) - 1
-    for col, ax, sfx in (("E", "90", "p"), ("F", "-90", "n")):
-        F(f"{col}{AX0}", f'=OAR.CONCRETE.COLUMNAXIS({SEC},{BARS_V},{MOD},{ax},{CLS_V},«Ec»)'); arrays.append(f"{col}{AX0}:{col}{AX1}")
-        for kk, n_ in enumerate(["Nuo", "Nuot", "Nub", "Mub", "Muo", "kuo", "phib", "do", "Nud", "Mud", "phit"]): nm(f"{n_}{sfx}", f"{col}{AX0 + kk}")
-
-    # ---- magnifier
-    heading(ws, 100, "Design Moments – braced moment magnifier (Cl 10.4)")
-    note(ws, 101, "Nc = π²/Le² × 182 do φ0 Mc / (1 + βd), Mc = Mub. Short only if Le/r ≤ 25 (transverse load, M1*/M2* = −1). δb = 1 / (1 − N*/Nc) ≥ 1 (km = 1.0).")
-    note(ws, 102, "M*d = δb × max(|M*y|, 0.05 tw N*), sign of M*y. RFEM moments flagged as second order: δb = 1.")
-    table_header(ws, 103, [("B103:C103", "Case"), ("D103", "N* (kN)"), ("E103", "M*y (kNm)"), ("F103", "βd"), ("G103", "Nc (kN)"),
-                           ("H103", "δb"), ("I103", "0.05 tw N*"), ("J103", "M*d (kNm)")])
-    MAG0 = 104
+    # ---- design moments (second order from the analysis; minimum moment Cl 10.1.2)
+    heading(ws, 81, "Design Moments – vertical (second order)")
+    note(ws, 82, "M*d = max(|M*y span|, 0.05 tw N*), sign of M*y span (Cl 10.1.2 minimum). Moments from the analysis are second order: no magnifier.")
+    table_header(ws, 83, [("B83:C83", "Case"), ("D83", "N* (kN)"), ("E83", "M*y (kNm)"), ("F83", "0.05 tw N*"), ("G83", "M*d (kNm)")])
+    MAG0 = 84
     for i in range(NLC):
         gr = MAG0 + i; lr = LC0 + i; blank = f'$E${lr}=""'
         ws.merge_cells(f"B{gr}:C{gr}"); F(f"B{gr}", f"=$B${lr}"); ws[f"B{gr}"].font = font(8); ws[f"B{gr}"].alignment = CEN
         CA(f"D{gr}", f'=IF({blank},"",$E${lr})', "0.0")
         CA(f"E{gr}", f'=IF({blank},"",N($F${lr}))', "0.00")
-        CA(f"F{gr}", f'=IF({blank},"",IF(OR(D{gr}<=0,AND(«sl»<=40,D{gr}<=ABS(E{gr})/(2*«tw»/1000))),0,MIN(1,MAX(0,N($J${lr})))))', "0.00")
-        CA(f"G{gr}", f'=IF({blank},"",PI()^2/«Le»^2*182*IF(E{gr}>=0,«dop»,«don»)*«phi0»*IF(E{gr}>=0,«Mubp»,«Mubn»)*1E6/(1+F{gr})/1000)', "0")
-        CA(f"H{gr}", f'=IF({blank},"",IF(OR(D{gr}<=0,«O2»,«sl»<=25),1,IF(D{gr}>=G{gr},99,MAX(1,1/(1-D{gr}/G{gr})))))', "0.00")
-        CA(f"I{gr}", f'=IF({blank},"",MAX(0,0.05*«tw»/1000*D{gr}))', "0.00")
-        CA(f"J{gr}", f'=IF({blank},"",IF(E{gr}<0,-1,1)*H{gr}*MAX(ABS(E{gr}),I{gr}))', "0.00")
+        CA(f"F{gr}", f'=IF({blank},"",MAX(0,0.05*«tw»/1000*D{gr}))', "0.00")
+        CA(f"G{gr}", f'=IF({blank},"",IF(E{gr}<0,-1,1)*MAX(ABS(E{gr}),F{gr}))', "0.00")
 
     # ---- vertical capacity
-    CP = 111
+    CP = 91
     heading(ws, CP, "Vertical Strength – strain compatibility at N* (OAR Concrete add-in)")
     note(ws, CP + 1, "OAR.CONCRETE.COLUMN per metre at N*, M*d: φ from Tbl 2.2.2 (φ0 … φb by N*/Nub; any Class L bar → φb 0.65).")
     case_hdr(CP + 2)
@@ -272,20 +242,20 @@ def build_tab(name, d):
     C1 = C0 + len(CPR) - 1
     for i, c in enumerate(COLS):
         lr = LC0 + i; gr = MAG0 + i
-        F(f"{c}{C0}", f'=IF($E${lr}="","",OAR.CONCRETE.COLUMN({SEC},{BARS_V},{MOD},$D${gr},$J${gr},0,«phi0»,{CLS_V},«Ec»))')
+        F(f"{c}{C0}", f'=IF($E${lr}="","",OAR.CONCRETE.COLUMN({SEC},{BARS_V},{MOD},$D${gr},$G${gr},0,«phi0»,{CLS_V},«Ec»))')
         arrays.append(f"{c}{C0}:{c}{C1}")
-    RM = C1 + 1; sym(RM, "|M*d|"); desc(RM, "design moment, magnified"); U(f"K{RM}", "kNm")
-    for i, c in enumerate(COLS): CA(f"{c}{RM}", f'=IF($E${LC0 + i}="","",ABS($J${MAG0 + i}))', "0.00")
+    RM = C1 + 1; sym(RM, "|M*d|"); desc(RM, "design moment"); U(f"K{RM}", "kNm")
+    for i, c in enumerate(COLS): CA(f"{c}{RM}", f'=IF($E${LC0 + i}="","",ABS($G${MAG0 + i}))', "0.00")
     RSC = RM + 1; sym(RSC, "ratio"); desc(RSC, "|M*d| / φMu")
     for i, c in enumerate(COLS): CA(f"{c}{RSC}", f'=IF($E${LC0 + i}="","",{c}{RM}/{c}{C0 + 2})', "0.00")
 
     # ---- top support
     TS = RSC + 2
-    heading(ws, TS, "Top Support – M*y at the support (not magnified)")
+    heading(ws, TS, "Support – M*y at the support")
     case_hdr(TS + 1)
     T0 = TS + 2
-    for kk, (s_, ds, nf, u) in enumerate([("N*", "", "0.0", "kN"), ("M*y top", "", "0.00", "kNm"),
-                                          ("φMu", "capacity at N*", "0.00", "kNm"), ("ratio", "|M*y top| / φMu", "0.00", "")]):
+    for kk, (s_, ds, nf, u) in enumerate([("N*", "", "0.0", "kN"), ("M*y sup", "", "0.00", "kNm"),
+                                          ("φMu", "capacity at N*", "0.00", "kNm"), ("ratio", "|M*y sup| / φMu", "0.00", "")]):
         rr = T0 + kk; sym(rr, s_); desc(rr, ds); U(f"K{rr}", u)
         for i, c in enumerate(COLS):
             lr = LC0 + i; blank = f'$E${lr}=""'
@@ -312,7 +282,7 @@ def build_tab(name, d):
     U(f"G{r}", "kNm"); nm("phiMxp", f"E{r}"); nm("phiMxn", f"F{r}")
     r += 1; case_hdr(r)
     X0 = r + 1
-    sym(X0, "M*x"); desc(X0, "from RFEM"); U(f"K{X0}", "kNm")
+    sym(X0, "M*x"); desc(X0, "from the analysis"); U(f"K{X0}", "kNm")
     sym(X0 + 1, "ratio"); desc(X0 + 1, "|M*x| / φMuo")
     for i, c in enumerate(COLS):
         lr = LC0 + i
@@ -320,18 +290,10 @@ def build_tab(name, d):
         CA(f"{c}{X0 + 1}", f'=IF({c}{X0}="","",ABS({c}{X0})/IF({c}{X0}>=0,«phiMxp»,«phiMxn»))', "0.00")
     XR = X0 + 1
 
-    # ---- shear
-    SH = XR + 2
-    heading(ws, SH, "Shear (Cl 8.2.4.3, no shear reinforcement)")
-    r = SH + 1
-    sym(r, "kv"); desc(r, "200 / (1000 + 1.3 dv) ≤ 0.10"); CA(f"E{r}", "=MIN(0.1,200/(1000+1.3*«dv»))", "0.000", name="kv")
-    r += 1; sym(r, "φVuc"); desc(r, "0.75 kv b dv √f'c (√f'c ≤ 8)"); CA(f"E{r}", "=0.75*«kv»*1000*«dv»*MIN(SQRT(«fc»),8)/1000", "0.0", name="phiVuc"); U(f"G{r}", "kN")
-    VCOL = f"$I${LC0}:$I${LC0 + NLC - 1}"
-
     # ---- SLS deflection
-    SD = r + 2
+    SD = XR + 2
     heading(ws, SD, "Serviceability – deflection (short term)")
-    note(ws, SD + 1, "Δ = ΔRFEM × Ig / Ief / (1 − Ns/Ncr) for a linear gross-Ig RFEM deflection; Ief Cl 8.5.3.1 (Mcr with σcs and Ns/Ag); Ncr = π² Ec Ief / Le².")
+    note(ws, SD + 1, "Δ = Δ × Ig / Ief for a linear gross-Ig deflection; Ief Cl 8.5.3.1 (Mcr with σcs and Ns/Ag). A final deflection is used as entered.")
     r = SD + 2
     sym(r, "ρw | ρcw"); desc(r, "tension | compression steel / (b d), +M")
     CA(f"E{r}", f'=IF(«TWO»,($L${SB0 + 1}+$L${SB0 + 3}),SUM($L${SB0}:$L${SB0 + 3}))/(1000*«dd»)', "0.0000", name="rhow")
@@ -346,13 +308,12 @@ def build_tab(name, d):
     iefmax = "IF(«rhow»>=0.005,1,0.6)*«Ig»"
     CA(f"E{r}", f'=IF(OR(«Icr»="",ABS(N(«Ms»))<=«Mcr»),{iefmax},MIN({iefmax},«Icr»/(1-(1-«Icr»/«Ig»)*(«Mcr»/«Ms»)^2)))', "0.00", name="Ief")
     U(f"G{r}", "×10⁶ mm⁴")
-    r += 1; sym(r, "Ncr"); desc(r, "π² Ec Ief / Le²"); CA(f"E{r}", "=PI()^2*«Ec»*«Ief»*1E6/«Le»^2/1000", "0", name="Ncr"); U(f"G{r}", "kN")
-    r += 1; sym(r, "Δ"); desc(r, f'=IF(«dbasis»="{DEFL[1]}","as entered (RFEM final)","ΔRFEM × Ig/Ief / (1 − Ns/Ncr)")')
-    CA(f"E{r}", f'=IF(«DR»="","",IF(«dbasis»="{DEFL[1]}",ABS(«DR»),IF(N(«Ns»)>=«Ncr»,999,ABS(«DR»)*«Ig»/«Ief»/(1-MAX(0,N(«Ns»))/«Ncr»))))', "0.0", name="Dtot")
+    r += 1; sym(r, "Δ"); desc(r, f'=IF(«dbasis»="{DEFL[1]}","as entered (final)","Δ × Ig / Ief")')
+    CA(f"E{r}", f'=IF(«DR»="","",IF(«dbasis»="{DEFL[1]}",ABS(«DR»),ABS(«DR»)*«Ig»/«Ief»))', "0.0", name="Dtot")
     U(f"G{r}", "mm")
-    r += 1; sym(r, "Δ limit"); desc(r, "Hs / limit"); CA(f"E{r}", "=«Hs»/«dlim»", "0.0", name="Dlim"); U(f"G{r}", "mm")
+    r += 1; sym(r, "Δ limit"); desc(r, "entered"); CA(f"E{r}", "=«dlim»", "0.0", name="Dlim"); U(f"G{r}", "mm")
     LAST = r + 2
-    note(ws, LAST, "Not covered: lifting and handling, temporary bracing, in-plane lintel design, dowel / cleat capacity, FRL (AS 3600 Sec 5).")
+    note(ws, LAST, "Not covered: shear, slenderness (moments entered as second order), lifting and handling, temporary bracing, in-plane lintel design, dowel / cleat capacity, FRL (AS 3600 Sec 5).")
 
     # ---- add-in bar tables (not printed)
     lab(f"L{SB0 - 2}", "Add-in bar tables per metre (not printed): As | depth from outside face | fsy | x | Es | class", sz=7, color=GREY, i=True)
@@ -388,9 +349,9 @@ def build_tab(name, d):
     reo = ('IF(«TWO»,"2 layers ","central ")&«vbar»&"-"&«vs»&IF(AND(N(«xs»)>0,«xbar»<>"None")," + "&«xbar»&"-"&«xs»&" extra"&IF(«xpos»="Both faces / with mesh",""," ("&IF(«xpos»="Inside face","inside","outside")&")"),"")&IF(«TWO»," EF","")')
     F("B10", f'=«tw»&" thk  ·  "&{reo}&"  ·  f\'c "&«fc»')
     ws["B10"].font = font(12, True, color=GREEN); ws["B10"].alignment = LEFT
-    CHK0, CHK1 = 15, 29
+    CHK0, CHK1 = 15, 28
     c = ws["F10"]; c.value = f'=IF(COUNT(I{CHK0}:I{CHK1})=0,"–",MAX(I{CHK0}:I{CHK1}))'; c.font = font(12, True, color=GREEN); c.number_format = "0%"; c.alignment = LEFT
-    ADD = [f"E{AX0}:F{AX1}", f"E{C0}:J{C0}", f"E{T0 + 2}:J{T0 + 2}", f"E{r_muo}:F{r_muo + 1}", "«Icr»"]
+    ADD = [f"E{C0}:J{C0}", f"E{T0 + 2}:J{T0 + 2}", f"E{r_muo}:F{r_muo + 1}", "«Icr»"]
     errs = "+".join(f'COUNTIF({a},"#OAR*")' for a in ADD)
     c = ws["I10"]
     pend.append(("I10", f'=IF($V$7,"UPDATE ADD-IN",IF({errs}>0,"INPUT ERROR",IF(COUNT(I{CHK0}:I{CHK1})=0,"PENDING",'
@@ -399,7 +360,7 @@ def build_tab(name, d):
     for x in ws["I10:K10"][0]: x.border = BOX
     passfail_cf(ws, "I10:K10", "$I$10")
     ws.conditional_formatting.add("I10:K10", FormulaRule(formula=['$I$10="UPDATE ADD-IN"'], fill=PatternFill(bgColor="C55A11"), font=Font(color="FFFFFF", bold=True)))
-    F("B11", '="Span "&TEXT(«Hs»/1000,"0.0")&" m  ·  actions from RFEM, per metre  ·  "&IF(«O2»,"2nd order in RFEM","AS 3600 moment magnifier")&"  ·  "&«model»&" block"')
+    F("B11", '="Second-order design actions from the analysis, per metre  ·  "&«model»&" block"')
     ws["B11"].font = font(7, color=GREY)
     table_header(ws, 13, [("B13:C13", "Check"), ("D13", "Basis"), ("E13", "Actual"), ("F13", "Limit"), ("G13", "Unit"),
                           ("H13", "Other"), ("I13", "Utilisation"), ("J13:K13", "Status")])
@@ -417,35 +378,27 @@ def build_tab(name, d):
         ws[f"J{rr}"].font = font(9, True, color=GREEN); ws[f"J{rr}"].alignment = CEN
     for i in range(NLC):
         rr = 15 + i; c = COLS[i]; lr = LC0 + i; gr = MAG0 + i; blank = f'$E${lr}=""'
-        basis = f'=IF({blank},"(not used)","N* "&TEXT($D${gr},"0")&" kN"&IF($H${gr}>=99,"  ·  N* ≥ Nc: unstable",IF($H${gr}>1,"  ·  δb "&TEXT($H${gr},"0.00"),"")))'
+        basis = f'=IF({blank},"(not used)","N* "&TEXT($D${gr},"0")&" kN, M*y span")'
         chk(rr, f'=$B${lr}&" N–M"', basis, f'=IF({blank},"",{c}{RM})', f'=IF({blank},"",{c}{C0 + 2})', "kNm",
             f'=IF({blank},"",{c}{RSC})', other=f'=IF({blank},"",{c}{C0})', onf='"φ "0.00')
     def gov(rng, row): return f'INDEX({row},MATCH(MAX({rng}),{rng},0))'
     trow = f"E{TR}:J{TR}"
-    chk(21, "Top support", f'=IF(COUNT({trow})=0,"(no M*y top entered)","M*y top, not magnified  ·  "&{gov(trow, f"$E${T0 - 1}:$J${T0 - 1}")})',
+    chk(21, "Support M*y", f'=IF(COUNT({trow})=0,"(no M*y support entered)","M*y at the support  ·  "&{gov(trow, f"$E${T0 - 1}:$J${T0 - 1}")})',
         f'=IF(COUNT({trow})=0,"",ABS({gov(trow, f"$E${T0 + 1}:$J${T0 + 1}")}))',
         f'=IF(COUNT({trow})=0,"",{gov(trow, f"$E${T0 + 2}:$J${T0 + 2}")})', "kNm", f'=IF(COUNT({trow})=0,"",MAX({trow}))')
     xrow = f"E{XR}:J{XR}"
     chk(22, "Horizontal M*x", f'=IF(COUNT({xrow})=0,"(no M*x entered)","horizontal bars, N = 0  ·  "&{gov(xrow, f"$E${X0 - 1}:$J${X0 - 1}")})',
         f'=IF(COUNT({xrow})=0,"",ABS({gov(xrow, f"$E${X0}:$J${X0}")}))',
         f'=IF(COUNT({xrow})=0,"",ABS({gov(xrow, f"$E${X0}:$J${X0}")})/MAX({xrow}))', "kNm", f'=IF(COUNT({xrow})=0,"",MAX({xrow}))')
-    chk(23, "V* ≤ φVuc", f'=IF(COUNT({VCOL})=0,"(no V* entered)","Cl 8.2.4.3, no shear reo")',
-        f'=IF(COUNT({VCOL})=0,"",MAX(MAX({VCOL}),-MIN({VCOL})))', "=«phiVuc»", "kN", '=IF(E23="","",E23/F23)')
-    heading(ws, 24, "Serviceability", sz=8)
-    chk(25, "Δ ≤ Hs / limit", f'=IF(«DR»="","(no SLS deflection entered)",IF(«dbasis»="{DEFL[1]}","RFEM, as entered","RFEM × Ig/Ief "&TEXT(«Ig»/«Ief»,"0.00")&" × P-Δ "&TEXT(1/(1-MAX(0,N(«Ns»))/«Ncr»),"0.00")))',
+    heading(ws, 23, "Serviceability", sz=8)
+    chk(24, "Δ ≤ Δmax", f'=IF(«DR»="","(no SLS deflection entered)",IF(«dbasis»="{DEFL[1]}","as entered (final)","Δ × Ig/Ief "&TEXT(«Ig»/«Ief»,"0.00")))',
         '=«Dtot»', '=«Dlim»', "mm", '=IF(«Dtot»="","",«Dtot»/«Dlim»)', nf="0.0")
-    heading(ws, 26, "Detailing", sz=8)
-    chk(27, "ρv ≥ 0.0015", "vertical, main bars (Cl 11.7.1)", "=«rhov»", "=0.0015", "", '=IF(«rhov»=0,99,0.0015/«rhov»)', nf="0.000%")
-    chk(28, '=IF(«hrest»="Yes","ρh ≥ 0.0025","ρh ≥ 0.0015")',
+    heading(ws, 25, "Detailing", sz=8)
+    chk(26, "ρv ≥ 0.0015", "vertical, main bars (Cl 11.7.1)", "=«rhov»", "=0.0015", "", '=IF(«rhov»=0,99,0.0015/«rhov»)', nf="0.000%")
+    chk(27, '=IF(«hrest»="Yes","ρh ≥ 0.0025","ρh ≥ 0.0015")',
         '=IF(«hrest»="Yes","horizontal, restrained (Cl 11.7.2)","horizontal, free to move (Cl 11.7.2)")',
-        "=«rhoh»", '=IF(«hrest»="Yes",0.0025,0.0015)', "", '=IF(«rhoh»=0,99,F28/«rhoh»)', nf="0.000%")
-    chk(29, "spacing", "max(sv, sh) ≤ min(2.5 tw, 350) (Cl 11.7.3)", "=MAX(«vs»,«hs»)", "=MIN(2.5*«tw»,350)", "mm", "=E29/F29", nf="0")
-    heading(ws, 30, "Information", sz=8)
-    dmax = f"MAX(H{MAG0}:H{MAG0 + NLC - 1})"
-    chk(31, "Le / r", f'=IF(«O2»,"2nd order in RFEM",IF(«sl»>120,"> 120: confirm magnifier, or RFEM","moment magnifier, δb ≤ "&TEXT({dmax},"0.00")))',
-        "=«sl»", "=120", "", None, status='=IF(AND(«sl»>120,NOT(«O2»)),"check","info")', nf="0")
-    ws["J31"].font = font(8, i=True, color=GREY)
-    ws.conditional_formatting.add("J31:K31", FormulaRule(formula=['$J$31="check"'], font=Font(color=AMBER, bold=True, italic=False)))
+        "=«rhoh»", '=IF(«hrest»="Yes",0.0025,0.0015)', "", '=IF(«rhoh»=0,99,F27/«rhoh»)', nf="0.000%")
+    chk(28, "spacing", "max(sv, sh) ≤ min(2.5 tw, 350) (Cl 11.7.3)", "=MAX(«vs»,«hs»)", "=MIN(2.5*«tw»,350)", "mm", "=E28/F28", nf="0")
     status_cf(ws, f"J{CHK0}:K{CHK1}"); util_cf(ws, f"I{CHK0}:I{CHK1}", f"I{CHK0}")
     F("B12", f'=IFERROR(IF({errs}>0,"Add-in error – check the add-in cells on the calculation pages",IF(COUNT(I{CHK0}:I{CHK1})=0,"","Governs: "&INDEX(B{CHK0}:B{CHK1},MATCH(MAX(I{CHK0}:I{CHK1}),I{CHK0}:I{CHK1},0))'
              f'&" – "&INDEX(D{CHK0}:D{CHK1},MATCH(MAX(I{CHK0}:I{CHK1}),I{CHK0}:I{CHK1},0)))),"")')
@@ -458,11 +411,11 @@ def build_tab(name, d):
     def dvl(formula, ref):
         v = DataValidation(type="list", formula1=formula, allow_blank=True); ws.add_data_validation(v)
         for part in ref.split(): v.add(part)
-    dvl('"Rectangular,Curvilinear,Parabolic"', "E36"); dvl(f'"{ORD[0]},{ORD[1]}"', "E39"); dvl('"No,Yes"', "E50")
-    dvl('"Central,Two layers"', "E44"); dvl('"' + ",".join(XPOS) + '"', "H48 H49"); dvl("=BarList", "E46:E49"); dvl(f'"{DEFL[0]},{DEFL[1]}"', "E65")
+    dvl('"Rectangular,Curvilinear,Parabolic"', "E36"); dvl('"No,Yes"', "E47")
+    dvl('"Central,Two layers"', "E41"); dvl('"' + ",".join(XPOS) + '"', "H45 H46"); dvl("=BarList", "E43:E46"); dvl(f'"{DEFL[0]},{DEFL[1]}"', "E65")
     f = Fx('NOT(«TWO»)')
-    ws.conditional_formatting.add("E45", FormulaRule(formula=[f], fill=PatternFill(bgColor=NA_FILL), font=Font(color=NA_FONT)))
-    ws.conditional_formatting.add("B45", FormulaRule(formula=[f], font=Font(color=NA_FONT)))
+    ws.conditional_formatting.add("E42", FormulaRule(formula=[f], fill=PatternFill(bgColor=NA_FILL), font=Font(color=NA_FONT)))
+    ws.conditional_formatting.add("B42", FormulaRule(formula=[f], font=Font(color=NA_FONT)))
     for rr in range(15, LAST + 1):
         if ws.row_dimensions[rr].height is None: ws.row_dimensions[rr].height = 14
     ws.print_area = [f"A1:K{LAST}", "M6:T50", "M52:T96"]
@@ -470,15 +423,15 @@ def build_tab(name, d):
     return ws
 
 
-# ---------------- example (illustrative RFEM results: 180 panel, wind beam at 6.6 m, 0.8 m parapet) ----------------
-p1 = dict(loc="Example – 180 panel, wind beam at 6.6 m, 0.8 m parapet", tw=180, fc=32, Hs=6600, lay="Central",
+# ---------------- example (illustrative second-order analysis results: 180 panel, wind beam at 6.6 m, 0.8 m parapet) ----------------
+p1 = dict(loc="Example – 180 panel, wind beam at 6.6 m, 0.8 m parapet", tw=180, fc=32, lay="Central", dlim=44,
           vbar="N12", vs=200, hbar="N12", hs=250,
-          lcs=[("1.2G + 1.5Q", 9.0, -0.30, -0.45, 0.10, 0.10, 0.60),
-               ("1.2G + Wu inward", 20.6, 10.10, -0.80, 2.60, 6.00, 1.00),
-               ("0.9G + Wu inward", 15.5, 10.25, -0.75, 2.60, 6.00, 1.00),
-               ("0.9G + Wu outward", 15.4, -8.90, 0.75, -2.30, 5.40, 1.00),
-               ("1.2G + Wu outward", 20.5, -9.10, 0.80, -2.30, 5.40, 1.00),
-               ("G + 0.3Q + Eu", 17.5, 4.40, -0.40, 1.10, 2.60, 0.95)],
+          lcs=[("1.2G + 1.5Q", 9.0, -0.30, -0.45, 0.10),
+               ("1.2G + Wu inward", 20.6, 10.10, -0.80, 2.60),
+               ("0.9G + Wu inward", 15.5, 10.25, -0.75, 2.60),
+               ("0.9G + Wu outward", 15.4, -8.90, 0.75, -2.30),
+               ("1.2G + Wu outward", 20.5, -9.10, 0.80, -2.30),
+               ("G + 0.3Q + Eu", 17.5, 4.40, -0.40, 1.10)],
           Ns=17.0, Ms=6.4, DR=3.0)
 
 
