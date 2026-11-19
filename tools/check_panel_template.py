@@ -5,7 +5,7 @@
 1. LibreOffice recalculates the template. LibreOffice cannot run the add-in, so every OAR.CONCRETE.* cell is
    replaced by a value from the small section routines below (rectangular block, strain compatibility, cracked
    section - written separately from the F# engine), and the workbook is recalculated until the stubs settle.
-2. Every tab is then recomputed from its inputs by `panel()` below (design moments, capacity, deflection)
+2. Every tab is then recomputed from its inputs by `panel()` below (design moments, capacity, SLS bar stresses)
    and compared with the sheet's results.
 This checks the worksheet formulas; the engine itself is checked by tests/OAR.Concrete.Tests.
 """
@@ -101,6 +101,24 @@ def icr(b, D, bars0, ec, top):
     return (b * x ** 3 / 3 + sum(((n - 1) if y < x else n) * A * (x - y) ** 2 for A, y, *_ in bars)) / 1e6
 
 
+def cracked(b, D, bars0, ec, top, M, N):
+    """Cracked elastic section at M (kNm) and N (kN, compression ≥ 0): returns dn mm, σst MPa (largest tension), σc MPa."""
+    bars = flip(bars0, D, top); n = ES / ec
+    def F(x): return b * x * x / 2 + sum(((n - 1) if y < x else n) * A * (x - y) for A, y, *_ in bars)
+    def Mo(x): return b * x * x / 2 * (D / 2 - x / 3) + sum(((n - 1) if y < x else n) * A * (x - y) * (D / 2 - y) for A, y, *_ in bars)
+    e = M * 1e6 / (N * 1e3) if N > 0 else None
+    g = (lambda x: F(x)) if e is None else (lambda x: Mo(x) - e * F(x))
+    lo, hi = 1e-6, 50 * D
+    for _ in range(300):
+        mid = 0.5 * (lo + hi)
+        if (g(mid) < 0) == (g(lo) < 0): lo = mid
+        else: hi = mid
+    x = 0.5 * (lo + hi)
+    k = M * 1e6 / Mo(x) if e is None else N * 1e3 / F(x)     # Ec κ
+    st = max(n * k * (y - x) for A, y, *_ in bars)
+    return x, st, k * x
+
+
 # ------------------------------------------------------------------ LibreOffice recalculation with stubs
 def recalc(path, outdir):
     subprocess.run(["soffice", "--headless", "--calc", "--convert-to", "xlsx", "--outdir", outdir, path],
@@ -134,7 +152,7 @@ def stub_values(wsF, wsV):
             m = re.search(r'"Rect",\$([A-Z])\$(\d+):\$([A-Z])\$(\d+),\$L\$(\d+)', f)
             b = num(wsV[f"{m.group(1)}{m.group(2)}"].value); D = num(wsV[f"{m.group(3)}{m.group(4)}"].value)
             bs = bars(int(m.group(5)))
-            if ec is None: ec = num(wsV["E78"].value)
+            if ec is None: ec = next(num(wsV[f"E{r}"].value) for r in range(70, 90) if wsV[f"B{r}"].value == "Ec")
             ref = c.coordinate
             col, row_ = re.match(r"([A-Z]+)(\d+)", ref).groups(); row_ = int(row_)
             if "COLUMNAXIS(" in f:
@@ -156,9 +174,12 @@ def stub_values(wsF, wsV):
                 mu, phi = ult0(b, D, bs, fc, '"Sagging"' in f) if bs else (0, 0)
                 out[ref] = (mu if ",13,1)" in f else phi)
             elif "OAR.CONCRETE.CRACKED(" in f:
-                mm = re.search(r"ABS\((\$[A-Z]+\$\d+)\)", f)
-                M = num(wsV[cellref(mm.group(1))].value)
-                out[ref] = "" if not M else icr(b, D, bs, ec, M >= 0)
+                mm = re.search(r',([EF]\d+),"(Sagging|Hogging)",MAX\(0,N\((\$[A-Z]+\$\d+)\)\)', f)
+                M = num(wsV[mm.group(1)].value); Nn = max(0, num(wsV[cellref(mm.group(3))].value) or 0)
+                if not M: out[ref] = ""
+                else:
+                    dn_, st_, sc_ = cracked(b, D, bs, ec, mm.group(2) == "Sagging", M, Nn)
+                    out[ref] = dn_ if ",1,1)" in f else (st_ if ",3,1)" in f else sc_)
     return out
 
 
@@ -194,6 +215,7 @@ def run_stubbed(template, iters=4):
 def panel(ws):
     g = lambda r: ws[r].value
     tw, fc, phi0 = g("E34"), g("E35"), g("E38")
+    bw = g("E71")   # strip width: 1000 (unit width) or the isolated leg / head width
     Ec = next(ws[f"E{r}"].value for r in range(70, 90) if ws[f"B{r}"].value == "Ec")
     def rows(r0):
         out = []
@@ -202,7 +224,7 @@ def panel(ws):
             if A > 0: out.append((A, g(f"M{r}"), g(f"N{r}"), g(f"P{r}"), g(f"Q{r}")))
         return out
     bars, hbars = rows(250), rows(256)
-    two = g("E41") == "Two layers"
+    two = g("E42") == "Two layers"
     hx = {True: ult0(1000, tw, hbars, fc, True), False: ult0(1000, tw, hbars, fc, False)}
     out = {"cases": []}
     for i in range(6):
@@ -211,26 +233,16 @@ def panel(ws):
         if N_ in (None, ""): out["cases"].append(None); continue
         M2 = g(f"F{lr}") or 0; MT = g(f"G{lr}") or 0; Mx = g(f"H{lr}")
         Md = (-1 if M2 < 0 else 1) * max(abs(M2), 0.05 * tw / 1000 * N_)   # second order from the analysis
-        phi, mu, pmu = column(1000, tw, bars, fc, N_, Md, phi0)
-        top = abs(MT) / column(1000, tw, bars, fc, N_, MT, phi0)[2] if MT else None
+        phi, mu, pmu = column(bw, tw, bars, fc, N_, Md, phi0)
+        top = abs(MT) / column(bw, tw, bars, fc, N_, MT, phi0)[2] if MT else None
         xr = None
         if Mx not in (None, ""):
             mu_x, ph_x = hx[Mx >= 0]; xr = abs(Mx) / (mu_x * ph_x)
         out["cases"].append(dict(Md=abs(Md), ratio=abs(Md) / pmu, top=top, xr=xr))
-    # deflection
-    Ns, Ms, DR = g("E63") or 0, g("F63") or 0, g("E64")
-    if DR not in (None, ""):
-        dd = bars[1][1] if two else tw / 2
-        Ast = (bars[1][0] + (bars[3][0] if len(bars) > 3 else 0)) if two else sum(t[0] for t in bars)
-        Asc = (bars[0][0] + (bars[2][0] if len(bars) > 2 else 0)) if two else 0
-        rw, rcw = Ast / (1000 * dd), Asc / (1000 * dd)
-        scs = max(0, (2.5 * rw - 0.8 * rcw) / (1 + 50 * rw) * ES * g("E67"))
-        Ig = 1000 * tw ** 3 / 12; Z = 1000 * tw ** 2 / 6
-        Mcr = max(0, Z * (0.6 * math.sqrt(fc) - scs + Ns * 1000 / (1000 * tw)) / 1e6)
-        Imax = (1 if rw >= 0.005 else 0.6) * Ig
-        Icr_ = icr(1000, tw, bars, Ec, Ms >= 0) * 1e6 if Ms else None
-        Ief = Imax if (Icr_ is None or abs(Ms) <= Mcr) else min(Imax, Icr_ / (1 - (1 - Icr_ / Ig) * (Mcr / Ms) ** 2))
-        out["defl"] = abs(DR) if str(g("E65")).startswith("Final") else abs(DR) * Ig / Ief
+    # SLS cracked bar stresses (independent of the stubs: recomputed here)
+    Ns = max(0, g("E63") or 0)
+    out["sig"] = [cracked(bw, tw, bars, Ec, top, abs(Ms), Ns)[1] if Ms else None
+                  for Ms, top in ((g("E64"), True), (g("E65"), False))]
     return out
 
 
@@ -248,7 +260,7 @@ def main():
         print(f"{tab}: {ws['B10'].value}  ->  {ws['I10'].value}, max {ws['F10'].value}")
         lab = [(r, ws[f"B{r}"].value) for r in range(60, 200)]
         def after(start, name): return next(r for r, v in lab if r > start and v == name)
-        RM = after(0, "|M*d|"); TR = after(after(0, "M*y sup"), "ratio"); XR = after(after(0, "M*x"), "ratio"); DR_ = after(0, "Δ")
+        RM = after(0, "|M*d|"); TR = after(after(0, "M*y sup"), "ratio"); XR = after(after(0, "M*x"), "ratio"); ST = after(0, "σst")
         for i, c in enumerate(ref["cases"]):
             if c is None: continue
             col = "EFGHIJ"[i]
@@ -256,8 +268,9 @@ def main():
             cmp(f"LC{i + 1} ratio", ws[f"{col}{RM + 1}"].value, c["ratio"])
             cmp(f"LC{i + 1} support ratio", ws[f"{col}{TR}"].value, c["top"])
             cmp(f"LC{i + 1} M*x ratio", ws[f"{col}{XR}"].value, c["xr"])
-        cmp("SLS deflection", ws[f"E{DR_}"].value, ref.get("defl"))
-        for r in range(15, 29):
+        cmp("SLS σst Ms+", ws[f"E{ST}"].value, ref["sig"][0])
+        cmp("SLS σst Ms−", ws[f"F{ST}"].value, ref["sig"][1])
+        for r in range(15, 30):
             print(f"     {str(ws[f'B{r}'].value or ''):<16} {str(ws[f'D{r}'].value or '')[:60]:<60} {ws[f'E{r}'].value!s:>10.8} {ws[f'F{r}'].value!s:>10.8} {ws[f'I{r}'].value!s:>8.6} {ws[f'J{r}'].value}")
     print("ALL OK" if bad == 0 else f"{bad} mismatches")
     return bad

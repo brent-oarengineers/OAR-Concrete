@@ -113,21 +113,24 @@ the add-in and restart Excel") and the status box shows **UPDATE ADD-IN** on scr
 ### The tilt panel calc tab
 
 One tab per panel (or panel zone); in-service only (lifting and bracing by the contractor's lifting designer).
-The analysis is done in any FE package; the sheet does the AS 3600 section checks per metre width.
+The analysis is done in any FE package; the sheet checks the reinforcement to AS 3600.
 
+- **Design strip**: *Unit width* (b = 1000, actions per metre, extras at spacing) or *Isolated leg / head* (width b,
+  actions are strip totals, extra vertical bars as a number in b). Horizontal bending stays per metre of height.
 - **Inputs** per ULS combination (6 rows): N*, second-order M*y in the span, M*y at the support (parapet / bracket)
-  and M*x. SLS: Ns, Ms and the maximum deflection, with the deflection limit in mm.
+  and M*x. SLS (working): Ns, Ms+ inward and Ms− outward, optional bar stress limit.
 - **Screenshots**: frames to the right (M:T) for the ULS and SLS plate results, printed as extra pages.
-- **Moments are second order** from the analysis (stiffness consistent with AS 3600) – no moment magnifier, no span or
-  effective length inputs. M*d = max(|M*y span|, 0.05 tw N*).
+- **Moments are second order** from the analysis – no magnifier. M*d = max(|M*y span|, 0.05 tw N*).
 - **Capacity**: vertical φMu at N* (`COLUMN`), M*y at the support, horizontal M*x against the horizontal bars (`ULT`).
-  Extras (bar-spacing, inside / outside face) count in the capacity and must be where the peak moment is.
-- **SLS**: a linear gross-Ig deflection is scaled by Ig/Ief (Cl 8.5.3.1, Mcr with σcs and Ns/Ag), or used as entered.
+  Extras (inside / outside face) count in the capacity and must be where the peak moment is.
+- **SLS**: cracked bar stress σst at Ms+ and Ms− with Ns (`CRACKED`, n = Es/Ec), reported in the checks table; a
+  check when a σs limit is entered.
 - **Detailing**: wall minimums (Cl 11.7) and spacing.
-- Not covered: shear, slenderness (in the analysis), lifting and bracing.
+- Not covered: shear, slenderness and deflection (in the analysis), lifting and bracing.
 
-Example tab P1 (illustrative results): 180 panel, central N12-200 / N12-250 – PASS, governs spacing 71 %.
-`python tools/check_panel_template.py` confirms every case against an independent calc (needs LibreOffice).
+Example tabs (illustrative results): P1 180 panel, central N12-200 / N12-250, unit width; P2 600 leg beside an
+opening, N12-200 + 2N16 extra on the inside face. `python tools/check_panel_template.py` confirms every case
+against an independent calc (needs LibreOffice).
 
 ## Checking the template in Excel
 
