@@ -3,6 +3,12 @@
 Each version that reaches `main` is built, tested and published automatically as a GitHub Release.
 The calc sheet shows the version it was calculated with (under the green title bar).
 
+## v0.6.2
+- Tilt panel: **face** input for the extra vertical and horizontal bars – *Both faces / with mesh*, *Inside face* or
+  *Outside face*. Central mesh: extras tied against the inside (or outside) of the mesh, so +M (inside tension) gets the
+  larger d and −M (suction / outside tension, top support) the reduced d. Two layers: that layer only. The summary line
+  shows the face. Default = previous behaviour.
+
 ## v0.6.1
 - **Tilt panel template reworked around RFEM.** The sheet no longer derives actions (wind / roof load statics,
   reactions and the top band are removed): N*, Wood–Armer M*y (span and top support), M*x, V* and βd per ULS
