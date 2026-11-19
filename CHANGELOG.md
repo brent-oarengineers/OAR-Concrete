@@ -3,6 +3,14 @@
 Each version that reaches `main` is built, tested and published automatically as a GitHub Release.
 The calc sheet shows the version it was calculated with (under the green title bar).
 
+## v0.6.4
+- Tilt panel: **design strip** option – *Unit width (per metre)* or *Isolated leg / head* (width b, actions as strip
+  totals, extra vertical bars as a total number). Horizontal bending stays per metre of height. New example tab P2
+  (600 leg, 2N16 extra on the inside face).
+- Tilt panel: **SLS cracked bar stresses** σst at the working moments Ms+ (inward) and Ms− (outward) with Ns, by
+  `OAR.CONCRETE.CRACKED`; reported in the checks table, checked when a σs limit is entered.
+- Tilt panel: **deflection check removed** (left to the analysis), with its inputs and the Ief calc.
+
 ## v0.6.3
 - Tilt panel: **moments are entered as second order** from the analysis – the moment magnifier, span Hs, effective length
   factor, βd and Le/r are removed. M*d = max(|M*y span|, 0.05 tw N*).
