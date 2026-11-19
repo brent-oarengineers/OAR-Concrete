@@ -3,6 +3,13 @@
 Each version that reaches `main` is built, tested and published automatically as a GitHub Release.
 The calc sheet shows the version it was calculated with (under the green title bar).
 
+## v0.6.3
+- Tilt panel: **moments are entered as second order** from the analysis – the moment magnifier, span Hs, effective length
+  factor, βd and Le/r are removed. M*d = max(|M*y span|, 0.05 tw N*).
+- Tilt panel: **shear check removed** (V* input, φVuc and the check row).
+- Tilt panel: no reference to a particular package – "from the analysis". SLS deflection limit entered in mm (was Hs /
+  limit); the P-Δ amplification is removed (second-order deflection from the analysis).
+
 ## v0.6.2
 - Tilt panel: **face** input for the extra vertical and horizontal bars – *Both faces / with mesh*, *Inside face* or
   *Outside face*. Central mesh: extras tied against the inside (or outside) of the mesh, so +M (inside tension) gets the

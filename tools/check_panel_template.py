@@ -5,7 +5,7 @@
 1. LibreOffice recalculates the template. LibreOffice cannot run the add-in, so every OAR.CONCRETE.* cell is
    replaced by a value from the small section routines below (rectangular block, strain compatibility, cracked
    section - written separately from the F# engine), and the workbook is recalculated until the stubs settle.
-2. Every tab is then recomputed from its inputs by `panel()` below (statics, magnifier, shear, deflection, band)
+2. Every tab is then recomputed from its inputs by `panel()` below (design moments, capacity, deflection)
    and compared with the sheet's results.
 This checks the worksheet formulas; the engine itself is checked by tests/OAR.Concrete.Tests.
 """
@@ -145,8 +145,8 @@ def stub_values(wsF, wsV):
                 Nn, Mm = num(wsV[mm.group(1)].value), num(wsV[mm.group(2)].value)
                 out[ref] = "" if (Nn is None or not Mm) else column(b, D, bs, fc, Nn, Mm, phi0)[2]
             elif "OAR.CONCRETE.COLUMN(" in f:                                   # capacity array
-                mm = re.search(r"\$D\$(\d+),\$J\$(\d+)", f)
-                Nn, Mm = num(wsV[f"D{mm.group(1)}"].value), num(wsV[f"J{mm.group(2)}"].value)
+                mm = re.search(r"\$D\$(\d+),\$G\$(\d+)", f)
+                Nn, Mm = num(wsV[f"D{mm.group(1)}"].value), num(wsV[f"G{mm.group(2)}"].value)
                 if Nn is None: vals = [""] * 10
                 else:
                     phi, mu, pmu = column(b, D, bs, fc, Nn, Mm, phi0); vals = [phi, mu, pmu, 0, 0, 0, 0, 0, 0, 0]
@@ -193,9 +193,8 @@ def run_stubbed(template, iters=4):
 # ------------------------------------------------------------------ independent member checks from the inputs
 def panel(ws):
     g = lambda r: ws[r].value
-    tw, fc, phi0, Hs, k = g("E34"), g("E35"), g("E38"), g("E40"), g("E41")
-    second = str(g("E39")).startswith("Second")
-    Ec = g("E78")
+    tw, fc, phi0 = g("E34"), g("E35"), g("E38")
+    Ec = next(ws[f"E{r}"].value for r in range(70, 90) if ws[f"B{r}"].value == "Ec")
     def rows(r0):
         out = []
         for r in range(r0, r0 + 4):
@@ -203,27 +202,21 @@ def panel(ws):
             if A > 0: out.append((A, g(f"M{r}"), g(f"N{r}"), g(f"P{r}"), g(f"Q{r}")))
         return out
     bars, hbars = rows(250), rows(256)
-    two = g("E44") == "Two layers"
-    Le = k * Hs; sl = Le / (0.3 * tw)
-    axp, axn = axis(1000, tw, bars, fc, True), axis(1000, tw, bars, fc, False)
+    two = g("E41") == "Two layers"
     hx = {True: ult0(1000, tw, hbars, fc, True), False: ult0(1000, tw, hbars, fc, False)}
     out = {"cases": []}
     for i in range(6):
         lr = 55 + i
         N_ = g(f"E{lr}")
         if N_ in (None, ""): out["cases"].append(None); continue
-        M2 = g(f"F{lr}") or 0; MT = g(f"G{lr}") or 0; Mx = g(f"H{lr}"); bdin = g(f"J{lr}") or 0
-        bd = 0 if (N_ <= 0 or (sl <= 40 and N_ <= abs(M2) / (2 * tw / 1000))) else min(1, max(0, bdin))
-        ax = axp if M2 >= 0 else axn
-        Nc = math.pi ** 2 / Le ** 2 * 182 * ax["do"] * phi0 * ax["Mub"] * 1e6 / (1 + bd) / 1000
-        db = 1 if (N_ <= 0 or second or sl <= 25) else (99 if N_ >= Nc else max(1, 1 / (1 - N_ / Nc)))
-        Md = (-1 if M2 < 0 else 1) * db * max(abs(M2), 0.05 * tw / 1000 * N_)
+        M2 = g(f"F{lr}") or 0; MT = g(f"G{lr}") or 0; Mx = g(f"H{lr}")
+        Md = (-1 if M2 < 0 else 1) * max(abs(M2), 0.05 * tw / 1000 * N_)   # second order from the analysis
         phi, mu, pmu = column(1000, tw, bars, fc, N_, Md, phi0)
         top = abs(MT) / column(1000, tw, bars, fc, N_, MT, phi0)[2] if MT else None
         xr = None
         if Mx not in (None, ""):
             mu_x, ph_x = hx[Mx >= 0]; xr = abs(Mx) / (mu_x * ph_x)
-        out["cases"].append(dict(Md=abs(Md), db=db, ratio=abs(Md) / pmu, top=top, xr=xr))
+        out["cases"].append(dict(Md=abs(Md), ratio=abs(Md) / pmu, top=top, xr=xr))
     # deflection
     Ns, Ms, DR = g("E63") or 0, g("F63") or 0, g("E64")
     if DR not in (None, ""):
@@ -237,8 +230,7 @@ def panel(ws):
         Imax = (1 if rw >= 0.005 else 0.6) * Ig
         Icr_ = icr(1000, tw, bars, Ec, Ms >= 0) * 1e6 if Ms else None
         Ief = Imax if (Icr_ is None or abs(Ms) <= Mcr) else min(Imax, Icr_ / (1 - (1 - Icr_ / Ig) * (Mcr / Ms) ** 2))
-        Ncr = math.pi ** 2 * Ec * Ief / Le ** 2 / 1000
-        out["defl"] = abs(DR) if str(g("E65")).startswith("Final") else abs(DR) * Ig / Ief / (1 - max(0, Ns) / Ncr)
+        out["defl"] = abs(DR) if str(g("E65")).startswith("Final") else abs(DR) * Ig / Ief
     return out
 
 
@@ -254,16 +246,18 @@ def main():
         ws = wb[tab]
         ref = panel(ws)
         print(f"{tab}: {ws['B10'].value}  ->  {ws['I10'].value}, max {ws['F10'].value}")
+        lab = [(r, ws[f"B{r}"].value) for r in range(60, 200)]
+        def after(start, name): return next(r for r, v in lab if r > start and v == name)
+        RM = after(0, "|M*d|"); TR = after(after(0, "M*y sup"), "ratio"); XR = after(after(0, "M*x"), "ratio"); DR_ = after(0, "Δ")
         for i, c in enumerate(ref["cases"]):
             if c is None: continue
             col = "EFGHIJ"[i]
-            cmp(f"LC{i + 1} |M*d|", ws[f"{col}124"].value, c["Md"])
-            cmp(f"LC{i + 1} δb", ws[f"H{104 + i}"].value, c["db"])
-            cmp(f"LC{i + 1} ratio", ws[f"{col}125"].value, c["ratio"])
-            cmp(f"LC{i + 1} top ratio", ws[f"{col}132"].value, c["top"])
-            cmp(f"LC{i + 1} M*x ratio", ws[f"{col}142"].value, c["xr"])
-        cmp("SLS deflection", ws["E156"].value, ref.get("defl"))
-        for r in range(15, 32):
+            cmp(f"LC{i + 1} |M*d|", ws[f"{col}{RM}"].value, c["Md"])
+            cmp(f"LC{i + 1} ratio", ws[f"{col}{RM + 1}"].value, c["ratio"])
+            cmp(f"LC{i + 1} support ratio", ws[f"{col}{TR}"].value, c["top"])
+            cmp(f"LC{i + 1} M*x ratio", ws[f"{col}{XR}"].value, c["xr"])
+        cmp("SLS deflection", ws[f"E{DR_}"].value, ref.get("defl"))
+        for r in range(15, 29):
             print(f"     {str(ws[f'B{r}'].value or ''):<16} {str(ws[f'D{r}'].value or '')[:60]:<60} {ws[f'E{r}'].value!s:>10.8} {ws[f'F{r}'].value!s:>10.8} {ws[f'I{r}'].value!s:>8.6} {ws[f'J{r}'].value}")
     print("ALL OK" if bad == 0 else f"{bad} mismatches")
     return bad
