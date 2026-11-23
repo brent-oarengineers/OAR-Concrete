@@ -192,6 +192,11 @@ Tabs C1 (rectangular example, Brent's previous RC_Column sheet) and C2 (Ø600 pi
 - **Cl 10.6.4** interaction (αn = 0.7 + 1.7 N*/(0.6Nuo), 1 ≤ αn ≤ 2) is shown for every case; for rectangular sections the
   *Biaxial check governing* input picks it or strain compatibility for the check. Circular sections always use strain
   compatibility (any direction is a principal axis).
+- **Custom section** (Shape = *Custom polygon*): up to 12 corners (x, y) in order round the section; any edge can be a
+  circular arc (rise from the chord, + out / − in, drawn as 48 chords). Typical bars go at every corner plus a number
+  along each edge, at cover + ligature + db/2 from the faces – following the arcs (`OAR.CONCRETE.BARLAYOUT` with
+  shape `Polygon`). Gross properties from `OAR.CONCRETE.SECTIONPROPS`; r = √(I/Ag). Biaxial by strain compatibility.
+  Example tab C3: 1000 × 200 blade with the soffit curving up to 150 deep at mid-width, N16 bars following the curve.
 - **Key points** (page 1): φN and φM about each axis at squash, decompression (dn = do), balanced, pure bending and
   pure tension.
 - **Graphics** (OAR ribbon > **Column graphics**): a window, like OAR Steel / Timber's View graphics, drawing the active

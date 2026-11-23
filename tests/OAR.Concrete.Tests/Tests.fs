@@ -266,6 +266,38 @@ let main argv =
     check "Contour  closed (first = last)" ct.Head.Mx (List.last ct).Mx 1e-9
     check "Contour  theta 90 point = Mx capacity" 587.311 ct.Head.Mx 3e-3
 
+    // custom outline (Polygon shape): a rectangle given as corners matches Section.rectangle; an arc soffit
+    let rectCs: Outline.Corner list =
+        [ { X = 0.0; Y = 0.0; Rise = 0.0; Bars = 0 }; { X = 300.0; Y = 0.0; Rise = 0.0; Bars = 0 }
+          { X = 300.0; Y = 600.0; Rise = 0.0; Bars = 0 }; { X = 0.0; Y = 600.0; Rise = 0.0; Bars = 0 } ]
+    let polyCol = Outline.section rectCs colBars
+    let bp = Column.biaxial polyCol c40 1500.0 200.0 80.0 0.6 duct
+    let br = Column.biaxial col c40 1500.0 200.0 80.0 0.6 duct
+    check "Outline  rectangle as corners: same biaxial phiMu" (br.Phi * br.Mu) (bp.Phi * bp.Mu) 1e-9
+    let pr = Outline.props (Outline.polygon rectCs)
+    check "Outline  rectangle Ix = b D^3 / 12" (300.0 * 600.0 ** 3.0 / 12.0) pr.Ix 1e-9
+    check "Outline  rectangle Iy = D b^3 / 12" (600.0 * 300.0 ** 3.0 / 12.0) pr.Iy 1e-9
+    // 1000 x 200 with the soffit curving up 50 to a 150 depth at mid-width (concave arc, rise -50)
+    let soffit: Outline.Corner list =
+        [ { X = 0.0; Y = 0.0; Rise = -50.0; Bars = 3 }; { X = 1000.0; Y = 0.0; Rise = 0.0; Bars = 0 }
+          { X = 1000.0; Y = 200.0; Rise = 0.0; Bars = 3 }; { X = 0.0; Y = 200.0; Rise = 0.0; Bars = 0 } ]
+    let R = (500.0 ** 2.0 + 50.0 ** 2.0) / 100.0
+    let th = 2.0 * asin (500.0 / R)
+    let seg = R * R / 2.0 * (th - sin th)
+    check "Outline  arc soffit area = 1000 x 200 - circular segment (48 chords)" (200000.0 - seg) (Outline.props (Outline.polygon soffit)).A 2e-4
+    let lay = Outline.layout soffit 56.0
+    check "Outline  layout: 4 corners + 3 + 3 bars" 10.0 (float lay.Length) 0.0
+    let mid = lay |> List.filter (fun (x, y) -> abs (x - 500.0) < 1e-6) |> List.map snd |> List.sort
+    check "Outline  mid-width bottom bar on the curve: 50 + 56" 106.0 mid.Head 1e-9
+    check "Outline  mid-width top bar: 200 - 56" 144.0 mid.[1] 1e-9
+    let first = lay.[1] // first of the 3 bars along the arc; the arc's centre is at (500, 50 - R)
+    check "Outline  arc bars follow the offset arc (radius R + 56)" (R + 56.0) (sqrt ((fst first - 500.0) ** 2.0 + (snd first - (50.0 - R)) ** 2.0)) 1e-9
+
+    // biaxial on a thin, unsymmetric section: the capacity direction swings fast near θ = 270 (regression)
+    let soffitSec = Outline.section soffit (Outline.layout soffit 58.0 |> List.map (fun (x, y) -> Section.barAt 200.0 (200.0 - y) 500.0 x EsDefault))
+    let bt = Column.biaxial soffitSec c40 250.0 -45.0 -12.5 0.6 duct
+    check "Outline  biaxial on the curved blade: capacity along the load direction" (atan2 -12.5 -45.0) (atan2 bt.My bt.Mx) 1e-6
+
     // column graphics (OAR > Column graphics): scenes build from the same engine calls
     let cvData: ColumnView.ColumnData =
         { Title = "C1"; Section = col; Concrete = c40; Duct = duct; Phi0 = 0.6; BarNames = List.replicate colBars.Length "N24"

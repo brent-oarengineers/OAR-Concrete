@@ -191,7 +191,34 @@ let biaxial (sec: Section) (c: Concrete) (nKN: float) (mx: float) (my: float) (p
                             lo <- min t0 t
                             hi <- max t0 t
                 step <- step + 5.0
-            if Double.IsNaN lo then failwith "biaxial: no neutral axis direction found for this load direction"
+            if Double.IsNaN lo then
+                // fallback for strongly unsymmetric sections (ψ can swing through a large angle within a few degrees
+                // of θ): scan the full circle for a sign change that is not a wrap-around (|g jump| < 180°),
+                // nearest to t0 first
+                let step = 2.0
+                let cands =
+                    [ for k in 0 .. int (360.0 / step) - 1 do
+                          let a, b = t0 - 180.0 + step * float k, t0 - 180.0 + step * float (k + 1)
+                          yield a, b ]
+                let gs = Collections.Generic.Dictionary<float, float>()
+                let gm t =
+                    match gs.TryGetValue t with
+                    | true, v -> v
+                    | _ ->
+                        let v = g t
+                        gs.[t] <- v
+                        v
+                let found =
+                    cands
+                    |> List.sortBy (fun (a, b) -> abs ((a + b) / 2.0 - t0))
+                    |> List.tryFind (fun (a, b) ->
+                        let ga, gb = gm a, gm b
+                        Math.Sign ga <> Math.Sign gb && abs (ga - gb) < 180.0)
+                match found with
+                | Some(a, b) ->
+                    lo <- a
+                    hi <- b
+                | None -> failwith "biaxial: no neutral axis direction found for this load direction"
             let glo = g lo
             let mutable i = 0
             while hi - lo > 1e-7 && i < 80 do

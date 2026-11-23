@@ -10,7 +10,7 @@ open OAR.Concrete.Materials
 [<Literal>]
 let Category = "OAR Concrete"
 
-let private version = "0.7.0"
+let private version = "0.8.0"
 
 // ---------- conversion helpers (same as OAR Timber) ----------
 
@@ -70,17 +70,38 @@ let private column (values: float list) =
 
 // ---------- section from the sheet ----------
 
-/// shape "Rect" with dims {b, D}, or "Circle" with dims {D}. Returns the builder and the default bar x.
+/// Custom outline corners from a range: rows x | y | [rise] | [bars along the edge]; blank rows skipped
+let private cornersOf (dims: obj) =
+    let a = range dims
+    if Array2D.length2 a < 2 then failwith "dims: a custom outline needs rows of x | y | [rise] | [bars] (mm)"
+    [ for i in 0 .. Array2D.length1 a - 1 do
+          match cellOpt a.[i, 0], cellOpt a.[i, 1] with
+          | Some x, Some y ->
+              let opt j = if Array2D.length2 a > j then cellOpt a.[i, j] else None
+              yield
+                  { Outline.X = x
+                    Outline.Y = y
+                    Outline.Rise = defaultArg (opt 2) 0.0
+                    Outline.Bars = int (defaultArg (opt 3) 0.0) }
+          | _ -> () ]
+
+/// shape "Rect" with dims {b, D}, "Circle" with dims {D}, or "Polygon" with dims = corner rows. Returns the builder
+/// and the default bar x.
 let private shapeOf (shape: obj) (dims: obj) =
-    let d = range dims |> Seq.cast<obj> |> Seq.choose cellOpt |> Array.ofSeq
     let s = (text shape).ToUpperInvariant()
+    if s.StartsWith "POLY" || s.StartsWith "CUSTOM" then
+        let cs = cornersOf dims
+        let pr = Outline.props (Outline.polygon cs)
+        (fun bars -> Outline.section cs bars), (pr.XMax - pr.XMin) / 2.0
+    else
+    let d = range dims |> Seq.cast<obj> |> Seq.choose cellOpt |> Array.ofSeq
     if s = "" || s.StartsWith "RECT" || s = "SLAB" || s = "BEAM" then
         if d.Length < 2 then failwith "dims: a rectangle needs 2 cells, b and D (mm)"
         (fun bars -> Section.rectangle d.[0] d.[1] bars), d.[0] / 2.0
     elif s.StartsWith "CIRC" then
         if d.Length < 1 then failwith "dims: a circle needs its diameter D (mm)"
         (fun bars -> Section.circular d.[0] bars), d.[0] / 2.0
-    else failwithf "shape '%s' not recognised (Rect, Circle)" (text shape)
+    else failwithf "shape '%s' not recognised (Rect, Circle, Polygon)" (text shape)
 
 /// Bars table, one row per bar or layer: As (mm²) | depth from top face (mm) | fsy (MPa) | [x from left (mm)] | [Es (MPa)].
 /// Rows with a blank or zero area are skipped.
@@ -131,7 +152,7 @@ let concreteVersion () : obj = box ("OAR Concrete " + version)
                 Category = Category,
                 IsThreadSafe = true)>]
 let concreteUlt
-    ([<ExcelArgument(Name = "shape", Description = "Rect or Circle")>] shape: obj)
+    ([<ExcelArgument(Name = "shape", Description = "Rect, Circle or Polygon")>] shape: obj)
     ([<ExcelArgument(Name = "dims", Description = "Rect: 2 cells b, D (mm). Circle: D (mm)")>] dims: obj)
     ([<ExcelArgument(Name = "bars", Description = "Rows: As mm² | depth from top mm | fsy MPa | [x from left mm] | [Es MPa]")>] bars: obj)
     ([<ExcelArgument(Name = "fc", Description = "f'c, MPa")>] fc: obj)
@@ -166,7 +187,7 @@ let concreteUlt
                 Category = Category,
                 IsThreadSafe = true)>]
 let concreteCracked
-    ([<ExcelArgument(Name = "shape", Description = "Rect or Circle")>] shape: obj)
+    ([<ExcelArgument(Name = "shape", Description = "Rect, Circle or Polygon")>] shape: obj)
     ([<ExcelArgument(Name = "dims", Description = "Rect: 2 cells b, D (mm). Circle: D (mm)")>] dims: obj)
     ([<ExcelArgument(Name = "bars", Description = "Rows: As mm² | depth from top mm | fsy MPa | [x from left mm] | [Es MPa]")>] bars: obj)
     ([<ExcelArgument(Name = "Ec", Description = "Concrete modulus for the modular ratio, MPa (Ec / (1 + φcc) for long term)")>] ecArg: obj)
@@ -185,7 +206,7 @@ let concreteCracked
                 Category = Category,
                 IsThreadSafe = true)>]
 let concreteMnCurve
-    ([<ExcelArgument(Name = "shape", Description = "Rect or Circle")>] shape: obj)
+    ([<ExcelArgument(Name = "shape", Description = "Rect, Circle or Polygon")>] shape: obj)
     ([<ExcelArgument(Name = "dims", Description = "Rect: 2 cells b, D (mm). Circle: D (mm)")>] dims: obj)
     ([<ExcelArgument(Name = "bars", Description = "Rows: As mm² | depth from top mm | fsy MPa | [x from left mm] | [Es MPa]")>] bars: obj)
     ([<ExcelArgument(Name = "fc", Description = "f'c, MPa")>] fc: obj)
@@ -244,22 +265,29 @@ let private grid (rows: float list list) =
     box out
 
 [<ExcelFunction(Name = "OAR.CONCRETE.BARLAYOUT",
-                Description = "Typical column bar layout. Spills rows x | y (mm from the section centre), padded with blanks to [rows]. Rect: n1 bars along each b face, n2 along each D face (corners counted in both). Circle: n1 bars, first at the top",
+                Description = "Typical column bar layout. Spills rows x | y (mm from the section centre), padded with blanks to [rows]. Rect: n1 bars along each b face, n2 along each D face (corners counted in both). Circle: n1 bars, first at the top. Polygon: a bar at each corner plus each edge's bars, following the outline (and arcs)",
                 Category = Category, IsThreadSafe = true)>]
 let concreteBarLayout
-    ([<ExcelArgument(Name = "shape", Description = "Rect or Circle")>] shape: obj)
-    ([<ExcelArgument(Name = "dims", Description = "Rect: b, D (mm). Circle: D (mm)")>] dims: obj)
+    ([<ExcelArgument(Name = "shape", Description = "Rect, Circle or Polygon")>] shape: obj)
+    ([<ExcelArgument(Name = "dims", Description = "Rect: b, D (mm). Circle: D (mm). Polygon: corner rows x | y | [rise] | [bars]")>] dims: obj)
     ([<ExcelArgument(Name = "edge", Description = "Face to bar centre: cover + ligature + db/2 (mm)")>] edgeArg: obj)
     ([<ExcelArgument(Name = "n1", Description = "Rect: bars per b face incl. corners. Circle: number of bars")>] n1Arg: obj)
     ([<ExcelArgument(Name = "[n2]", Description = "Rect: bars per D face incl. corners")>] n2Arg: obj)
     ([<ExcelArgument(Name = "[rows]", Description = "Rows to fill (blank rows after the last bar), default 40")>] rowsArg: obj)
     : obj =
     guard (fun () ->
-        let d = range dims |> Seq.cast<obj> |> Seq.choose cellOpt |> Array.ofSeq
         let s = (text shape).ToUpperInvariant()
         let edge = num "edge" edgeArg
-        let n1 = int (num "n1" n1Arg)
         let pts =
+            if s.StartsWith "POLY" || s.StartsWith "CUSTOM" then
+                // corner bars plus each edge's bars, from the centre of the bounding box
+                let cs = cornersOf dims
+                let pr = Outline.props (Outline.polygon cs)
+                let xm, ym = (pr.XMin + pr.XMax) / 2.0, (pr.YMin + pr.YMax) / 2.0
+                Outline.layout cs edge |> List.map (fun (x, y) -> x - xm, y - ym)
+            else
+            let d = range dims |> Seq.cast<obj> |> Seq.choose cellOpt |> Array.ofSeq
+            let n1 = int (num "n1" n1Arg)
             if s.StartsWith "CIRC" then Column.circLayout d.[0] edge n1
             else Column.rectLayout d.[0] d.[1] edge n1 (int (num "n2" n2Arg))
         let rows = int (defaultArg (numOpt "rows" rowsArg) 40.0)
@@ -268,12 +296,33 @@ let concreteBarLayout
         pts |> List.iteri (fun i (x, y) -> out.[i, 0] <- box (Math.Round(x, 3)); out.[i, 1] <- box (Math.Round(y, 3)))
         box out)
 
+[<ExcelFunction(Name = "OAR.CONCRETE.SECTIONPROPS",
+                Description = "Gross section properties. Spills 5 values down: b mm (width, x) | D mm (depth, y) | Ag mm² | Ix mm⁴ | Iy mm⁴ (about the centroid)",
+                Category = Category, IsThreadSafe = true)>]
+let concreteSectionProps
+    ([<ExcelArgument(Name = "shape", Description = "Rect, Circle or Polygon")>] shape: obj)
+    ([<ExcelArgument(Name = "dims", Description = "Rect: b, D. Circle: D. Polygon: corner rows x | y | [rise] | [bars] (mm)")>] dims: obj)
+    : obj =
+    guard (fun () ->
+        let s = (text shape).ToUpperInvariant()
+        if s.StartsWith "POLY" || s.StartsWith "CUSTOM" then
+            let pr = Outline.props (Outline.polygon (cornersOf dims))
+            column [ pr.XMax - pr.XMin; pr.YMax - pr.YMin; pr.A; pr.Ix; pr.Iy ]
+        else
+            let d = range dims |> Seq.cast<obj> |> Seq.choose cellOpt |> Array.ofSeq
+            if s.StartsWith "CIRC" then
+                let dd = d.[0]
+                column [ dd; dd; Math.PI * dd * dd / 4.0; Math.PI * dd ** 4.0 / 64.0; Math.PI * dd ** 4.0 / 64.0 ]
+            else
+                let b, dd = d.[0], d.[1]
+                column [ b; dd; b * dd; b * dd ** 3.0 / 12.0; dd * b ** 3.0 / 12.0 ])
+
 [<ExcelFunction(Name = "OAR.CONCRETE.COLUMN",
                 Description = "Column capacity at N* along the direction of (M*x, M*y), strain compatibility (biaxial). Spills 10 values down: φ | Mu kNm | φMu kNm | Mux kNm | Muy kNm | θ deg | dn mm | Nub kN | Nuo kN | εs outermost tension bar",
                 Category = Category, IsThreadSafe = true)>]
 let concreteColumn
-    ([<ExcelArgument(Name = "shape", Description = "Rect or Circle")>] shape: obj)
-    ([<ExcelArgument(Name = "dims", Description = "Rect: b, D (mm). Circle: D (mm)")>] dims: obj)
+    ([<ExcelArgument(Name = "shape", Description = "Rect, Circle or Polygon")>] shape: obj)
+    ([<ExcelArgument(Name = "dims", Description = "Rect: b, D (mm). Circle: D (mm). Polygon: corner rows x | y | [rise] | [bars]")>] dims: obj)
     ([<ExcelArgument(Name = "bars", Description = "Rows: As mm² | depth from top mm | fsy MPa | x from left mm | [Es MPa]")>] bars: obj)
     ([<ExcelArgument(Name = "fc", Description = "f'c, MPa")>] fc: obj)
     ([<ExcelArgument(Name = "model", Description = "Rectangular, Curvilinear or Parabolic")>] model: obj)
@@ -295,8 +344,8 @@ let concreteColumn
                 Description = "Column properties for bending about one axis. Spills 11 values down: Nuo kN | Nuot kN | Nub kN | Mub kNm | Muo kNm | kuo | φb | do mm | Nud kN | Mud kNm | φ tension",
                 Category = Category, IsThreadSafe = true)>]
 let concreteColumnAxis
-    ([<ExcelArgument(Name = "shape", Description = "Rect or Circle")>] shape: obj)
-    ([<ExcelArgument(Name = "dims", Description = "Rect: b, D (mm). Circle: D (mm)")>] dims: obj)
+    ([<ExcelArgument(Name = "shape", Description = "Rect, Circle or Polygon")>] shape: obj)
+    ([<ExcelArgument(Name = "dims", Description = "Rect: b, D (mm). Circle: D (mm). Polygon: corner rows x | y | [rise] | [bars]")>] dims: obj)
     ([<ExcelArgument(Name = "bars", Description = "Rows: As mm² | depth from top mm | fsy MPa | x from left mm | [Es MPa]")>] bars: obj)
     ([<ExcelArgument(Name = "fc", Description = "f'c, MPa")>] fc: obj)
     ([<ExcelArgument(Name = "model", Description = "Rectangular, Curvilinear or Parabolic")>] model: obj)
@@ -313,8 +362,8 @@ let concreteColumnAxis
                 Description = "Column M–N curve for one axis, 40 rows from pure tension to the squash load: N kN | M kNm | φ | φN kN | φM kNm",
                 Category = Category, IsThreadSafe = true)>]
 let concreteMnColumn
-    ([<ExcelArgument(Name = "shape", Description = "Rect or Circle")>] shape: obj)
-    ([<ExcelArgument(Name = "dims", Description = "Rect: b, D (mm). Circle: D (mm)")>] dims: obj)
+    ([<ExcelArgument(Name = "shape", Description = "Rect, Circle or Polygon")>] shape: obj)
+    ([<ExcelArgument(Name = "dims", Description = "Rect: b, D (mm). Circle: D (mm). Polygon: corner rows x | y | [rise] | [bars]")>] dims: obj)
     ([<ExcelArgument(Name = "bars", Description = "Rows: As mm² | depth from top mm | fsy MPa | x from left mm | [Es MPa]")>] bars: obj)
     ([<ExcelArgument(Name = "fc", Description = "f'c, MPa")>] fc: obj)
     ([<ExcelArgument(Name = "model", Description = "Rectangular, Curvilinear or Parabolic")>] model: obj)
@@ -333,8 +382,8 @@ let concreteMnColumn
                 Description = "Biaxial moment capacity contour at axial force N (closed loop, [points] + 1 rows): Mux | Muy | φMux | φMuy (kNm)",
                 Category = Category, IsThreadSafe = true)>]
 let concreteMContour
-    ([<ExcelArgument(Name = "shape", Description = "Rect or Circle")>] shape: obj)
-    ([<ExcelArgument(Name = "dims", Description = "Rect: b, D (mm). Circle: D (mm)")>] dims: obj)
+    ([<ExcelArgument(Name = "shape", Description = "Rect, Circle or Polygon")>] shape: obj)
+    ([<ExcelArgument(Name = "dims", Description = "Rect: b, D (mm). Circle: D (mm). Polygon: corner rows x | y | [rise] | [bars]")>] dims: obj)
     ([<ExcelArgument(Name = "bars", Description = "Rows: As mm² | depth from top mm | fsy MPa | x from left mm | [Es MPa]")>] bars: obj)
     ([<ExcelArgument(Name = "fc", Description = "f'c, MPa")>] fc: obj)
     ([<ExcelArgument(Name = "model", Description = "Rectangular, Curvilinear or Parabolic")>] model: obj)
