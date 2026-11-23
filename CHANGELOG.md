@@ -3,6 +3,15 @@
 Each version that reaches `main` is built, tested and published automatically as a GitHub Release.
 The calc sheet shows the version it was calculated with (under the green title bar).
 
+## v0.7.0
+- **Column graphics window** (OAR ribbon > Concrete column > Column graphics), like OAR Steel / Timber's View graphics:
+  section and bars to scale, M–N about x and y (both directions, unfactored and φ, key points, design actions) and the
+  moment contour at each case's N* with |M*d| / φMu. Follows edits and the tab in front; Save PDF / Print one or all
+  pictures on A4.
+- Column sheet: the Excel charts, their helper data (rows 300+, columns M onward, including the NA() cells) and the
+  "contour plotted for case" input are removed; the sheet points to Column graphics instead. One page shorter per tab.
+- Add-in now packs the Excel interop assemblies (sheet events for the window).
+
 ## v0.6.4
 - Tilt panel: **design strip** option – *Unit width (per metre)* or *Isolated leg / head* (width b, actions as strip
   totals, extra vertical bars as a total number). Horizontal bending stays per metre of height. New example tab P2

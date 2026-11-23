@@ -194,8 +194,12 @@ Tabs C1 (rectangular example, Brent's previous RC_Column sheet) and C2 (Ø600 pi
   compatibility (any direction is a principal axis).
 - **Key points** (page 1): φN and φM about each axis at squash, decompression (dn = do), balanced, pure bending and
   pure tension.
-- **Charts**: M–N for each axis (φ and unfactored) with the design actions, the moment contour at N* of a chosen case,
-  and the section with its bars.
+- **Graphics** (OAR ribbon > **Column graphics**): a window, like OAR Steel / Timber's View graphics, drawing the active
+  column tab – the section and bars to scale (coloured by bar type), the M–N interaction about x and about y in both
+  directions (unfactored and φ, key points, design actions), and the moment contour at each load case's N* with the
+  capacity along the load direction and |M*d| / φMu. It reads the tab's OAR.CONCRETE.COLUMN formulas, follows edits and
+  the column tab in front, and saves one or all pictures to PDF (A4) for the calc record. Drawn by
+  `src/OAR.Concrete.Core/ColumnView.fs` (plain data, tested), shown by `src/OAR.Concrete.Excel/ColumnWindow.fs`.
 
 New add-in functions: `BARLAYOUT`, `COLUMN`, `COLUMNAXIS`, `MNCOLUMN`, `MCONTOUR`. Checked against a 2 mm fibre-grid
 reference (uniaxial and biaxial, within 0.3 %) and Brent's pile calculator (Ø600 6N20: Mu 222.3 vs 221.7 kNm).

@@ -266,6 +266,33 @@ let main argv =
     check "Contour  closed (first = last)" ct.Head.Mx (List.last ct).Mx 1e-9
     check "Contour  theta 90 point = Mx capacity" 587.311 ct.Head.Mx 3e-3
 
+    // column graphics (OAR > Column graphics): scenes build from the same engine calls
+    let cvData: ColumnView.ColumnData =
+        { Title = "C1"; Section = col; Concrete = c40; Duct = duct; Phi0 = 0.6; BarNames = List.replicate colBars.Length "N24"
+          Cases = [ { Name = "LC1"; Description = "test"; N = 1500.0; Mx = 200.0; My = 80.0 }
+                    { Name = "LC2"; Description = ""; N = 900.0; Mx = -150.0; My = 0.0 } ] }
+    let polys (sc: ColumnView.Scene) = sc.Prims |> List.filter (fun p -> match p with ColumnView.PPolygon _ -> true | _ -> false) |> List.length
+    let lines (sc: ColumnView.Scene) = sc.Prims |> List.filter (fun p -> match p with ColumnView.PPolyline _ -> true | _ -> false) |> List.length
+    let scSec = ColumnView.scene cvData ColumnView.SectionItem ColumnView.defaultView 1000.0 700.0
+    check "Graphics  section: outline + bars + one key swatch per bar type" (float (1 + colBars.Length + 1)) (float (polys scSec)) 0.0
+    let scMN = ColumnView.scene cvData (ColumnView.MNItem 'x') ColumnView.defaultView 1000.0 700.0
+    check "Graphics  M-N: unfactored and phi curves" 2.0 (float (lines scMN)) 0.0
+    let scC = ColumnView.scene cvData (ColumnView.ContourItem 0) ColumnView.defaultView 1000.0 700.0
+    check "Graphics  contour: unfactored and phi curves" 2.0 (float (lines scC)) 0.0
+    let bx = Column.biaxial col c40 1500.0 200.0 80.0 0.6 duct
+    let pctText = sprintf "|M*d| / φMu = %.0f %%" (100.0 * sqrt (200.0 ** 2.0 + 80.0 ** 2.0) / (bx.Phi * bx.Mu))
+    check "Graphics  contour reports the biaxial utilisation" 1.0
+        (if scC.Prims |> List.exists (fun p -> match p with ColumnView.PText(_, _, t, _, _, _, _) -> t = pctText | _ -> false) then 1.0 else 0.0) 0.0
+    check "Graphics  items: section + 2 M-N + one contour per case" 5.0 (float (ColumnView.items cvData).Length) 0.0
+    let pile = Section.circular 600.0 ((Column.circLayout 600.0 72.0 6 |> List.map (fun (x, y) -> Section.barAt 310.0 (300.0 - y) 500.0 (300.0 + x) EsDefault)) @ [ Section.barAt 1018.0 300.0 950.0 300.0 205000.0 ])
+    let pileData = { cvData with Section = pile; Concrete = rc 32.0 Rectangular; BarNames = List.replicate 6 "N20" @ [ "TB36" ]
+                                 Cases = [ { Name = "LC1"; Description = "pile"; N = 0.0; Mx = 150.0; My = 0.0 } ] }
+    for name, sc in [ "pile", ColumnView.scene pileData ColumnView.SectionItem ColumnView.defaultView 1000.0 700.0
+                      "pile_mn", ColumnView.scene pileData (ColumnView.MNItem 'x') ColumnView.defaultView 1000.0 700.0
+                      "section", scSec; "mn_x", scMN; "contour", scC; "mn_y", ColumnView.scene cvData (ColumnView.MNItem 'y') ColumnView.defaultView 1000.0 700.0 ] do
+        let dir = System.Environment.GetEnvironmentVariable "OAR_SVG_DIR"
+        if not (System.String.IsNullOrEmpty dir) then System.IO.File.WriteAllText(System.IO.Path.Combine(dir, name + ".svg"), ColumnView.svg sc)
+
     printfn ""
     printfn "%d checks, %d failed" count failures
     if failures = 0 then 0 else 1
