@@ -14,12 +14,8 @@ from openpyxl.worksheet.datavalidation import DataValidation
 from openpyxl.workbook.defined_name import DefinedName
 from openpyxl.worksheet.pagebreak import Break
 from openpyxl.worksheet.formula import ArrayFormula
-from openpyxl.chart import ScatterChart, Reference, Series
 from openpyxl.chart.shapes import GraphicalProperties
 from openpyxl.drawing.line import LineProperties
-from openpyxl.chart.axis import ChartLines
-from openpyxl.chart.text import RichText
-from openpyxl.drawing.text import Paragraph, ParagraphProperties, CharacterProperties, RichTextProperties
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
@@ -191,7 +187,7 @@ def build_tab(name, d):
         for j, col in enumerate("EFGHI"): IN(f"{col}{r}", lc[1 + j] if lc else None, "0.0")
     small("J64", "kNm")
     note(ws, 71, "N* compression +. End moments: same sign = single curvature. Blank N* = case not used. Minimum eccentricity 0.05D applies about each axis (Cl 10.1.2).")
-    lab("B72", "Moment contour plotted for case"); IN("E72", d.get("contour", 1), "0", name="lcsel"); small("F72", "1 – 6")
+    note(ws, 72, "Diagrams (section, M–N, moment contour for each case): OAR ribbon > Column graphics.")
 
     # ================================================================== SECTION + BAR SCHEDULE (helpers first; formulas reference them)
     # bar schedule rows
@@ -327,43 +323,11 @@ def build_tab(name, d):
     B1064 = B0 + 6
     CALC_END = B1064
 
-    # ================================================================== CHARTS (page 3) and helper data (columns M onward, not printed)
+    # ================================================================== GRAPHICS: drawn by the add-in window (OAR > Column graphics)
     CH = CALC_END + 2
-    heading(ws, CH, "Interaction Diagrams")
-    HR = 300  # helper rows start (below everything, outside the print area)
-    lab(f"M{HR - 1}", "Chart data (not printed)", sz=7, color=GREY, i=True)
-    # M–N curves: 40 rows x 5 (N, M, φ, φN, φM)
-    for ax, col in (("x", "M"), ("y", "S")):
-        c0 = col; c4 = chr(ord(col) + 4)
-        lab(f"{c0}{HR}", f"M–N {ax}: N | M | φ | φN | φM", sz=7, color=GREY)
-        ws[f"{c0}{HR + 1}"].value = f'=OAR.CONCRETE.MNCOLUMN({SEC},{BARS_ARG},{MOD},"{ax}",«phi0»,{CLS_ARG},«Ec»)'
-        pend.append((f"{c0}{HR + 1}", ws[f"{c0}{HR + 1}"].value)); arrays.append(f"{c0}{HR + 1}:{c4}{HR + 40}")
-    # load points: |M*d| vs N* per axis (NA() when unused so the charts skip them)
-    lab(f"Y{HR}", "loads x: M | N   y: M | N", sz=7, color=GREY)
-    for i in range(NLC):
-        rr = HR + 1 + i; lr = LC0 + i
-        for col, src in (("Y", f"ABS($K${DX0 + i})"), ("Z", f"$E${lr}"), ("AA", f"ABS($K${DY0 + i})"), ("AB", f"$E${lr}")):
-            pend.append((f"{col}{rr}", f'=IF($E${lr}="",NA(),{src})'))
-    # contour at the selected case
-    lab(f"AD{HR}", "contour: Mx | My | φMx | φMy", sz=7, color=GREY)
-    NSEL = f"INDEX($E${LC0}:$E${LC0 + NLC - 1},«lcsel»)"
-    pend.append((f"AD{HR + 1}", f'=IF({NSEL}="","",OAR.CONCRETE.MCONTOUR({SEC},{BARS_ARG},{MOD},{NSEL},36,«phi0»,{CLS_ARG},«Ec»))'))
-    arrays.append(f"AD{HR + 1}:AG{HR + 37}")
-    lab(f"AI{HR}", "contour load: Mx | My", sz=7, color=GREY)
-    pend.append((f"AI{HR + 1}", f'=IFERROR(INDEX($K${DX0}:$K${DX0 + NLC - 1},«lcsel»)*1,NA())'))
-    pend.append((f"AJ{HR + 1}", f'=IFERROR(INDEX($K${DY0}:$K${DY0 + NLC - 1},«lcsel»)*1,NA())'))
-    # section outline: rectangle (5 points) or circle (73 points), mm from centre
-    lab(f"AL{HR}", "outline: x | y", sz=7, color=GREY)
-    for k in range(73):
-        rr = HR + 1 + k
-        a = f"(PI()/2-2*PI()*{k}/72)"
-        rect_pts = [(-1, 1), (1, 1), (1, -1), (-1, -1), (-1, 1)]
-        if k < 5:
-            sx, sy = rect_pts[k]
-            fx = f'=IF(«CIRC»,«b»/2*COS({a}),{sx}*«b»/2)'; fy = f'=IF(«CIRC»,«b»/2*SIN({a}),{sy}*«D»/2)'
-        else:
-            fx = f'=IF(«CIRC»,«b»/2*COS({a}),NA())'; fy = f'=IF(«CIRC»,«b»/2*SIN({a}),NA())'
-        pend.append((f"AL{rr}", fx)); pend.append((f"AM{rr}", fy))
+    heading(ws, CH, "Interaction Diagrams and Section")
+    note(ws, CH + 1, "OAR ribbon > Column graphics: the section and bars to scale, M–N about x and y with the design actions, and the moment contour at each case's N*.")
+    note(ws, CH + 2, "Same engine and inputs as this sheet. Save PDF from the window (one picture, or all pages) to add the diagrams to the calc record.")
 
     # ================================================================== BAR SCHEDULE (last page)
     heading(ws, BS0 - 3, "Bar Schedule")
@@ -390,8 +354,7 @@ def build_tab(name, d):
         CA(f"K{rr}", f'=IF(H{rr}="","",IFERROR({barv(f"G{rr}", 6)}/1000,200))', "0")
         # engine columns
         for col, f in (("L", f"=N(H{rr})"), ("M", f'=IF(L{rr}=0,"",IF(«CIRC»,«b»,«D»)/2-F{rr})'),
-                       ("N", f'=IF(L{rr}=0,"",I{rr})'), ("O", f'=IF(L{rr}=0,"",«b»/2+E{rr})'), ("P", f'=IF(L{rr}=0,"",K{rr}*1000)'),
-                       ("Q", f'=IF(L{rr}=0,NA(),E{rr})'), ("R", f'=IF(L{rr}=0,NA(),F{rr})')):
+                       ("N", f'=IF(L{rr}=0,"",I{rr})'), ("O", f'=IF(L{rr}=0,"",«b»/2+E{rr})'), ("P", f'=IF(L{rr}=0,"",K{rr}*1000)')):
             pend.append((f"{col}{rr}", f)); ws[f"{col}{rr}"].font = font(7, color=GREY)
     pend.append((f"E{TYP0}", f'=IF(OR(«bar»="",«bar»="None"),"",OAR.CONCRETE.BARLAYOUT({SEC},«edge»,«n1»,«n2»,{NTYP}))'))
     arrays.append(f"E{TYP0}:F{TYP1}")
@@ -464,70 +427,6 @@ def build_tab(name, d):
         ws[f"J{rr}"].font = font(8, i=True, color=GREY)
     status_cf(ws, f"J{CHK0}:K{CHK1}"); util_cf(ws, f"I{CHK0}:I{CHK1}", f"I{CHK0}")
 
-    # ================================================================== charts
-    # Plain engineering plots: no chart title or legend (caption in the cell above), thin lines,
-    # light major and minor gridlines, axes at the left / bottom, square border.
-    BLUE, ORANGE, DOT = "4472C4", "ED7D31", "FF0000"
-    def thin(color, w=9525): return GraphicalProperties(ln=LineProperties(solidFill=color, w=w))
-    def tick_font(sz=800):
-        return RichText(bodyPr=RichTextProperties(), p=[Paragraph(pPr=ParagraphProperties(defRPr=CharacterProperties(sz=sz, solidFill="404040")), endParaRPr=CharacterProperties())])
-    def line_series(xref, yref, color, width=15875, marker=False):
-        s = Series(yref, xref); s.smooth = False
-        if marker:
-            s.marker.symbol = "circle"; s.marker.size = 5
-            s.marker.graphicalProperties = GraphicalProperties(solidFill=color, ln=LineProperties(solidFill=color))
-            s.graphicalProperties.line = LineProperties(noFill=True)
-        else:
-            s.marker.symbol = "none"
-            s.graphicalProperties.line = LineProperties(solidFill=color, w=width)
-        return s
-    def chart(xmin=None, w=9.6, h=6.9):
-        c = ScatterChart(); c.style = 2; c.height = h; c.width = w
-        c.title = None; c.legend = None; c.roundedCorners = False
-        c.graphical_properties = GraphicalProperties(ln=LineProperties(solidFill="000000", w=9525))
-        for a in (c.x_axis, c.y_axis):
-            a.delete = False; a.title = None
-            a.majorGridlines = ChartLines(spPr=thin("D9D9D9"))
-            a.minorGridlines = ChartLines(spPr=thin("F2F2F2"))
-            a.spPr = thin("808080"); a.txPr = tick_font()
-            a.crosses = "min"; a.tickLblPos = "low"
-            a.majorTickMark = "none"; a.minorTickMark = "none"
-            a.number_format = "General"
-        if xmin is not None: c.x_axis.scaling.min = xmin
-        return c
-    def caption(cell, text):
-        ws[cell] = text; ws[cell].font = font(9, b=True, color=GREEN)
-    note(ws, CH + 1, "Blue = unfactored capacity, orange = φ capacity, red = design actions. Contour at N* of the case selected in the inputs.")
-    for ax, col, cap, anchor in (("x", "M", "B", "B"), ("y", "S", "G", "G")):
-        cN = col; cM = chr(ord(col) + 1); cPN = chr(ord(col) + 3); cPM = chr(ord(col) + 4)
-        caption(f"{cap}{CH + 2}", f"M–N about {ax}:  N (kN) vs M{ax} (kNm)")
-        ch = chart(xmin=0)
-        ch.series.append(line_series(Reference(ws, range_string=f"'{name}'!${cM}${HR + 1}:${cM}${HR + 40}"),
-                                     Reference(ws, range_string=f"'{name}'!${cN}${HR + 1}:${cN}${HR + 40}"), BLUE))
-        ch.series.append(line_series(Reference(ws, range_string=f"'{name}'!${cPM}${HR + 1}:${cPM}${HR + 40}"),
-                                     Reference(ws, range_string=f"'{name}'!${cPN}${HR + 1}:${cPN}${HR + 40}"), ORANGE))
-        lx, ly = ("Y", "Z") if ax == "x" else ("AA", "AB")
-        ch.series.append(line_series(Reference(ws, range_string=f"'{name}'!${lx}${HR + 1}:${lx}${HR + NLC}"),
-                                     Reference(ws, range_string=f"'{name}'!${ly}${HR + 1}:${ly}${HR + NLC}"), DOT, marker=True))
-        ws.add_chart(ch, f"{anchor}{CH + 3}")
-    caption(f"B{CH + 18}", "Moment contour at N*:  My vs Mx (kNm)")
-    ch = chart()
-    ch.series.append(line_series(Reference(ws, range_string=f"'{name}'!$AD${HR + 1}:$AD${HR + 37}"),
-                                 Reference(ws, range_string=f"'{name}'!$AE${HR + 1}:$AE${HR + 37}"), BLUE))
-    ch.series.append(line_series(Reference(ws, range_string=f"'{name}'!$AF${HR + 1}:$AF${HR + 37}"),
-                                 Reference(ws, range_string=f"'{name}'!$AG${HR + 1}:$AG${HR + 37}"), ORANGE))
-    ch.series.append(line_series(Reference(ws, range_string=f"'{name}'!$AI${HR + 1}:$AI${HR + 1}"),
-                                 Reference(ws, range_string=f"'{name}'!$AJ${HR + 1}:$AJ${HR + 1}"), DOT, marker=True))
-    ws.add_chart(ch, f"B{CH + 19}")
-    caption(f"G{CH + 18}", "Section:  y vs x (mm from centre)")
-    ch = chart()
-    ch.series.append(line_series(Reference(ws, range_string=f"'{name}'!$AL${HR + 1}:$AL${HR + 73}"),
-                                 Reference(ws, range_string=f"'{name}'!$AM${HR + 1}:$AM${HR + 73}"), "404040"))
-    ch.series.append(line_series(Reference(ws, range_string=f"'{name}'!$Q${RS0}:$Q${RS1}"),
-                                 Reference(ws, range_string=f"'{name}'!$R${RS0}:$R${RS1}"), GREEN, marker=True))
-    ch.series[-1].marker.size = 6
-    ws.add_chart(ch, f"G{CH + 19}")
-
     # ================================================================== resolve, arrays, validation, grey-outs, print
     for ref, f in pend: ws[ref].value = Fx(f)
     for ref in arrays:
@@ -543,7 +442,7 @@ def build_tab(name, d):
     for rr in range(15, LAST + 1):
         if ws.row_dimensions[rr].height is None: ws.row_dimensions[rr].height = 14
     ws.print_area = f"A1:K{LAST}"
-    for b_ in (62, 102, CALC_END + 1, BS0 - 4): ws.row_breaks.append(Break(id=b_))
+    for b_ in (62, 102, BS0 - 4): ws.row_breaks.append(Break(id=b_))
     return ws
 
 

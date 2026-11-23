@@ -10,7 +10,7 @@ open OAR.Concrete.Materials
 [<Literal>]
 let Category = "OAR Concrete"
 
-let private version = "0.6.4"
+let private version = "0.7.0"
 
 // ---------- conversion helpers (same as OAR Timber) ----------
 
@@ -223,6 +223,18 @@ let private axisOf (o: obj) =
 
 let private colArgs shape dims bars fc model ecArg =
     sectionOf shape dims bars, concrete (num "fc" fc) (numOpt "Ec" ecArg) (parseModel (text model))
+
+/// For OAR > Column graphics: the section, concrete and ductility class from the arguments of a COLUMN formula
+/// (values as the worksheet functions get them), so the window uses exactly what the sheet calculates
+let columnModel (shape: obj) (dims: obj) (bars: obj) (fc: obj) (model: obj) (classes: obj) (ecArg: obj) =
+    let sec, c = colArgs shape dims bars fc model ecArg
+    sec, c, ductOf classes
+
+/// A number argument as the worksheet functions read it (for the window)
+let numberArg (name: string) (o: obj) = num name o
+
+/// An optional number argument (blank = None)
+let numberOpt (o: obj) = numOpt "value" o
 
 let private grid (rows: float list list) =
     let n = rows.Length

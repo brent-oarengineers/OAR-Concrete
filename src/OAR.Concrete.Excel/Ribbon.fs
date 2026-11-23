@@ -91,6 +91,56 @@ let exportCalcs () =
             | :? string as file when file <> "" -> exportTo app wb sheets calcTabs file
             | _ -> ()   // cancelled (Excel returns False)
 
+// ---------- OAR > Column graphics ----------
+
+let private excel () = ExcelDnaUtil.Application :?> Microsoft.Office.Interop.Excel.Application
+
+/// Run an event handler without ever letting an error reach Excel
+let private safely (f: unit -> unit) =
+    try
+        f ()
+    with _ ->
+        ()
+
+let private tell (text: string) =
+    safely (fun () ->
+        let a = excel ()
+        let owner = { new IWin32Window with member _.Handle = nativeint a.Hwnd }
+        MessageBox.Show(owner, text, "OAR Concrete – Column graphics", MessageBoxButtons.OK, MessageBoxIcon.Information) |> ignore)
+
+/// The section, M–N curves and moment contours of the active column tab, in their own window
+let columnGraphics () =
+    try
+        let a = excel ()
+        match a.ActiveSheet with
+        | :? Microsoft.Office.Interop.Excel.Worksheet as ws when ColumnWindow.canShow ws ->
+            ColumnWindow.show a.Hwnd ws
+            safely (fun () -> a.StatusBar <- "Column graphics – window opened (it follows edits and the column tab in front)")
+        | :? Microsoft.Office.Interop.Excel.Worksheet ->
+            tell "The active tab is not an OAR column tab: it has no OAR.CONCRETE.COLUMN formulas in its capacity table. Open a tab made from OAR - RC Column Design."
+        | _ -> tell "The active sheet is not a worksheet."
+    with e ->
+        tell ("The window couldn't open: " + e.Message)
+
+[<ExcelCommand(Name = "OAR.CONCRETE.COLUMNGRAPHICS", Description = "Open the column graphics window for the active column tab")>]
+let columnGraphicsCommand () = columnGraphics ()
+
+// keep the Application object alive so its event connections are not collected
+let mutable private hooked: Microsoft.Office.Interop.Excel.Application = null
+
+let hook () =
+    if isNull hooked then
+        let a = excel ()
+        a.add_SheetChange(Microsoft.Office.Interop.Excel.AppEvents_SheetChangeEventHandler(fun _ _ -> safely ColumnWindow.sheetChanged))
+        a.add_SheetActivate(Microsoft.Office.Interop.Excel.AppEvents_SheetActivateEventHandler(fun sh -> safely (fun () -> ColumnWindow.sheetActivated sh)))
+        a.add_WorkbookActivate(Microsoft.Office.Interop.Excel.AppEvents_WorkbookActivateEventHandler(fun wb -> safely (fun () -> ColumnWindow.sheetActivated wb.ActiveSheet)))
+        hooked <- a
+
+type AddIn() =
+    interface IExcelAddIn with
+        member _.AutoOpen() = ExcelAsyncUtil.QueueAsMacro(ExcelAction(fun () -> safely hook))
+        member _.AutoClose() = ()
+
 /// Ribbon. The tab uses a shared idQ so OAR Steel / OAR Timber can add their own groups to the same "OAR" tab.
 [<ComVisible(true)>]
 type OarRibbon() =
@@ -106,9 +156,16 @@ type OarRibbon() =
                   supertip="Exports every visible calc tab (OAR green tab colour) in tab order into one PDF, using each tab's print area. Data tabs are skipped."
                   onAction="OnExportCalcs" />
         </group>
+        <group id="OarConcreteColumn" label="Concrete column">
+          <button id="OarColumnGraphics" label="Column graphics" size="large" imageMso="ChartTypeXYScatterInsertGallery"
+                  screentip="Column graphics"
+                  supertip="Draw the active column tab: the section and bars to scale, the M–N interaction about x and y with the design actions, and the moment contour at each load case's N*. Save PDF or print from the window."
+                  onAction="OnColumnGraphics" />
+        </group>
       </tab>
     </tabs>
   </ribbon>
 </customUI>"""
     member _.OnExportCalcs(_control: IRibbonControl) =
         ExcelAsyncUtil.QueueAsMacro(fun () -> exportCalcs ())
+    member _.OnColumnGraphics(_control: IRibbonControl) = columnGraphics ()
