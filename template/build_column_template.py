@@ -79,7 +79,7 @@ def build_tab(name, d):
         N[n] = f"${col}${row}"
     def Fx(s):
         if not isinstance(s, str): return s
-        s = s.replace("«CIRC»", '«shape»="Circular"').replace("«SHAPE»", 'IF(«shape»="Circular","Circle","Rect")')
+        s = s.replace("«CIRC»", '«shape»="Circular"').replace("«POLY»", '«shape»="Custom polygon"').replace("«SHAPE»", 'IF(«shape»="Circular","Circle",IF(«shape»="Custom polygon","Polygon","Rect"))')
         for k in sorted(N, key=len, reverse=True): s = s.replace(f"«{k}»", N[k])
         assert "«" not in s, s
         return s
@@ -156,7 +156,7 @@ def build_tab(name, d):
     lab("B43", "Stress block (ULS)"); IN("E43:F43", d.get("model", "Rectangular"), name="model")
     lab("B44", "Ec override"); IN("E44", None, "0", name="ecin"); U("F44", "MPa"); small("H44", "blank = Table 3.1.2")
     lab("B45", "φ0 for compression, Table 2.2.2(d)"); IN("E45", d.get("phi0", 0.6), "0.00", name="phi0"); small("H45", "Amdt 2: φ0 = 0.65 kφ – enter the value")
-    lab("B46", "Biaxial check governing"); IN("E46:F46", d.get("method", "Cl 10.6.4"), name="method"); small("H46", "circular: strain compatibility")
+    lab("B46", "Biaxial check governing"); IN("E46:F46", d.get("method", "Cl 10.6.4"), name="method"); small("H46", "circular / custom: strain compatibility")
 
     heading(ws, 48, "Reinforcement – typical layout")
     lab("B49", "Cover to ligature"); IN("E49", d["cover"], "0", name="cover"); U("F49", "mm")
@@ -191,46 +191,66 @@ def build_tab(name, d):
 
     # ================================================================== SECTION + BAR SCHEDULE (helpers first; formulas reference them)
     # bar schedule rows
-    BS0 = 191
+    BS0 = 208
     # custom (input) rows first, then the typical layout (add-in array)
     CUS0, CUS1 = BS0 + 1, BS0 + NCUS
     TYP0, TYP1 = CUS1 + 1, CUS1 + NTYP
     RS0, RS1 = CUS0, TYP1
     BARS_ARG = f"$L${RS0}:$P${RS1}"
     CLS_ARG = f"$J${RS0}:$J${RS1}"
-    SEC = '«SHAPE»,«b»:«D»'
+    SEC = '«SHAPE»,IF(«POLY»,«corners»,«b»:«D»)'
     MOD = '«fc»,«model»'
 
     # ================================================================== CALCULATIONS (page 2)
-    heading(ws, 74, "Section Properties")
-    table_header(ws, 75, [("E75", "x axis (Mx)"), ("F75", "y axis (My)")])
-    r = 76; sym(r, "Ag"); desc(r, '=IF(«CIRC»,"π D² / 4","b D")'); CA(f"E{r}", '=IF(«CIRC»,PI()*«b»^2/4,«b»*«D»)', "0", name="Ag"); U(f"G{r}", "mm²")
-    r = 77; sym(r, "As"); desc(r, "all bars (Bar Schedule)"); CA(f"E{r}", f"=SUM($L${RS0}:$L${RS1})", "0", name="As"); U(f"G{r}", "mm²")
-    r = 78; sym(r, "ρ"); desc(r, "As / Ag"); CA(f"E{r}", "=«As»/«Ag»", "0.00%", name="rho")
-    r = 79; sym(r, "n"); desc(r, "typical | custom bars")
+    # custom outline (Shape = Custom polygon)
+    heading(ws, 74, "Custom Section Outline (Shape = Custom polygon)")
+    note(ws, 75, "Corners in order round the section, x right / y up (mm, any origin). Rise: the edge to the next corner is an arc, its mid-point Rise from the chord (+ out, − in).")
+    table_header(ws, 76, [("B76:C76", "Corner"), ("D76", "edge to next corner"), ("E76", "x (mm)"), ("F76", "y (mm)"), ("G76", "rise (mm)"), ("H76", "bars on edge")])
+    NCOR = 12
+    cors = d.get("corners", [])
+    for k_ in range(NCOR):
+        rr = 77 + k_
+        ws.merge_cells(f"B{rr}:C{rr}"); ws[f"B{rr}"].value = k_ + 1; ws[f"B{rr}"].font = font(8, color=GREY); ws[f"B{rr}"].alignment = CEN
+        c_ = cors[k_] if k_ < len(cors) else (None, None, None, None)
+        F(f"D{rr}", f'=IF(E{rr}="","",IF(G{rr}<>0,"arc","straight")&" to corner "&IF(OR(E{rr + 1}="",{k_ + 1}={NCOR}),1,{k_ + 2}))' if k_ < NCOR - 1 else f'=IF(E{rr}="","",IF(G{rr}<>0,"arc","straight")&" to corner 1")')
+        ws[f"D{rr}"].font = font(8, color=GREY)
+        IN(f"E{rr}", c_[0], "0.0"); IN(f"F{rr}", c_[1], "0.0"); IN(f"G{rr}", c_[2], "0.0"); IN(f"H{rr}", c_[3], "0")
+    N["corners"] = f"$E$77:$H${76 + NCOR}"
+    note(ws, 89, "Typical bars: one at every corner plus 'bars on edge' along each edge, at cover + ligature + db/2 from the faces (following arcs). Bars per face inputs not used.")
+
+    heading(ws, 91, "Section Properties")
+    table_header(ws, 92, [("E92", "x axis (Mx)"), ("F92", "y axis (My)")])
+    pend.append(("M93", f'=OAR.CONCRETE.SECTIONPROPS({SEC})')); arrays.append("M93:M97")
+    for k_, t_ in enumerate(["b (bounding)", "D (bounding)", "Ag", "Ix", "Iy"]):
+        lab(f"N{93 + k_}", "SECTIONPROPS: " + t_, sz=7, color=GREY); ws[f"M{93 + k_}"].font = font(7, color=GREY)
+    nm("pb", "M93"); nm("pD", "M94"); nm("pA", "M95"); nm("pIx", "M96"); nm("pIy", "M97")
+    r = 93; sym(r, "Ag"); desc(r, '=IF(«CIRC»,"π D² / 4",IF(«POLY»,"custom outline (arcs as 48 chords)","b D"))'); CA(f"E{r}", '=IF(«POLY»,«pA»,IF(«CIRC»,PI()*«b»^2/4,«b»*«D»))', "0", name="Ag"); U(f"G{r}", "mm²")
+    r = 94; sym(r, "As"); desc(r, "all bars (Bar Schedule)"); CA(f"E{r}", f"=SUM($L${RS0}:$L${RS1})", "0", name="As"); U(f"G{r}", "mm²")
+    r = 95; sym(r, "ρ"); desc(r, "As / Ag"); CA(f"E{r}", "=«As»/«Ag»", "0.00%", name="rho")
+    r = 96; sym(r, "n"); desc(r, "typical | custom bars")
     CA(f"E{r}", f'=COUNTIFS($G${TYP0}:$G${TYP1},"<>",$H${TYP0}:$H${TYP1},">0")', "0", name="ntyp")
     CA(f"F{r}", f'=COUNTIF($H${CUS0}:$H${CUS1},">0")', "0", name="ncus")
-    r = 80; sym(r, "edge"); desc(r, "cover + ligature + db / 2")
+    r = 97; sym(r, "edge"); desc(r, "cover + ligature + db / 2")
     CA(f"E{r}", f'=«cover»+IFERROR({barv("«lig»", 2)},0)+IFERROR({barv("«bar»", 2)},0)/2', "0.0", name="edge"); U(f"G{r}", "mm")
-    r = 81; sym(r, "Dd"); desc(r, "section depth in the bending direction")
-    CA(f"E{r}", '=IF(«CIRC»,«b»,«D»)', "0", name="Dx"); CA(f"F{r}", '=«b»', "0", name="Dy"); U(f"G{r}", "mm")
-    r = 82; sym(r, "r"); desc(r, '=IF(«CIRC»,"0.25 D (Cl 10.5.2)","0.3 × depth (Cl 10.5.2)")')
-    CA(f"E{r}", '=IF(«CIRC»,0.25,0.3)*«Dx»', "0.0", name="rx"); CA(f"F{r}", '=IF(«CIRC»,0.25,0.3)*«Dy»', "0.0", name="ry"); U(f"G{r}", "mm")
-    r = 83; sym(r, "Le"); desc(r, "k Lu"); CA(f"E{r}", "=«kx»*«Lu»", "0", name="Lex"); CA(f"F{r}", "=«ky»*«Lu»", "0", name="Ley"); U(f"G{r}", "mm")
-    r = 84; sym(r, "Le / r"); desc(r, "slenderness ratio"); CA(f"E{r}", "=«Lex»/«rx»", "0.0", name="slx"); CA(f"F{r}", "=«Ley»/«ry»", "0.0", name="sly")
-    r = 85; sym(r, "Ec"); desc(r, '=IF(N(«ecin»)>0,"entered","Table 3.1.2, interpolated")')
+    r = 98; sym(r, "Dd"); desc(r, "section depth in the bending direction")
+    CA(f"E{r}", '=IF(«POLY»,«pD»,IF(«CIRC»,«b»,«D»))', "0", name="Dx"); CA(f"F{r}", '=IF(«POLY»,«pb»,«b»)', "0", name="Dy"); U(f"G{r}", "mm")
+    r = 99; sym(r, "r"); desc(r, '=IF(«POLY»,"√(I / Ag), custom outline (Cl 10.5.2)",IF(«CIRC»,"0.25 D (Cl 10.5.2)","0.3 × depth (Cl 10.5.2)"))')
+    CA(f"E{r}", '=IF(«POLY»,SQRT(«pIx»/«pA»),IF(«CIRC»,0.25,0.3)*«Dx»)', "0.0", name="rx"); CA(f"F{r}", '=IF(«POLY»,SQRT(«pIy»/«pA»),IF(«CIRC»,0.25,0.3)*«Dy»)', "0.0", name="ry"); U(f"G{r}", "mm")
+    r = 100; sym(r, "Le"); desc(r, "k Lu"); CA(f"E{r}", "=«kx»*«Lu»", "0", name="Lex"); CA(f"F{r}", "=«ky»*«Lu»", "0", name="Ley"); U(f"G{r}", "mm")
+    r = 101; sym(r, "Le / r"); desc(r, "slenderness ratio"); CA(f"E{r}", "=«Lex»/«rx»", "0.0", name="slx"); CA(f"F{r}", "=«Ley»/«ry»", "0.0", name="sly")
+    r = 102; sym(r, "Ec"); desc(r, '=IF(N(«ecin»)>0,"entered","Table 3.1.2, interpolated")')
     I_ = "MIN(MATCH(«fc»,EcFc,1),7)"
     CA(f"E{r}", f"=IF(N(«ecin»)>0,«ecin»,INDEX(EcVal,{I_})+(«fc»-INDEX(EcFc,{I_}))*(INDEX(EcVal,{I_}+1)-INDEX(EcVal,{I_}))/(INDEX(EcFc,{I_}+1)-INDEX(EcFc,{I_})))", "0", name="Ec")
     U(f"G{r}", "MPa")
 
-    heading(ws, 87, "Axis Properties (OAR Concrete add-in)")
-    note(ws, 88, "OAR.CONCRETE.COLUMNAXIS: strain compatibility, εcu 0.003. Nuo = α1 f'c Ac + fsy As (Ac net of bars, Cl 10.6.2.2); balanced point with the outermost tension bar at yield.")
-    table_header(ws, 89, [("E89", "x axis (Mx)"), ("F89", "y axis (My)")])
+    heading(ws, 104, "Axis Properties (OAR Concrete add-in)")
+    note(ws, 105, "OAR.CONCRETE.COLUMNAXIS: strain compatibility, εcu 0.003. Nuo = α1 f'c Ac + fsy As (Ac net of bars, Cl 10.6.2.2); balanced point with the outermost tension bar at yield.")
+    table_header(ws, 106, [("E106", "x axis (Mx)"), ("F106", "y axis (My)")])
     AX = [("Nuo", "squash load", "0", "kN"), ("Nuot", "pure tension", "0", "kN"), ("Nub", "balanced point", "0", "kN"),
           ("Mub", "moment at Nub (Mc, Cl 10.4.4)", "0.0", "kNm"), ("Muo", "pure bending", "0.0", "kNm"), ("kuo", "at pure bending", "0.000", ""),
           ("φb", "Tbl 2.2.2, pure bending", "0.000", ""), ("do", "to outermost tension bar", "0.0", "mm"),
           ("Nud", "decompression (dn = do)", "0", "kN"), ("Mud", "moment at Nud", "0.0", "kNm"), ("φt", "Tbl 2.2.2, pure tension", "0.000", "")]
-    AX0 = 90
+    AX0 = 107
     for i, (s_, ds, nf, u) in enumerate(AX):
         rr = AX0 + i; sym(rr, s_); desc(rr, ds); calc(ws, f"E{rr}", None, nf); calc(ws, f"F{rr}", None, nf); U(f"G{rr}", u)
     AX1 = AX0 + len(AX) - 1
@@ -264,14 +284,14 @@ def build_tab(name, d):
             sgn = f"IF(ABS(N({T}))>=ABS(N({Bm})),IF(N({T})<0,-1,1),IF(N({Bm})<0,-1,1))"
             CA(f"K{rr}", f'=IF({blank},"",{sgn}*J{rr}*MAX(E{rr},{emin}))', "0.0")
         return h + 1
-    heading(ws, 103, "Design Moments – minimum eccentricity and moment magnification (braced)")
-    note(ws, 104, "M2* larger end moment; M1*/M2* negative in single curvature, −1 if M2* ≤ 0.05 D N*. Short if Le/r ≤ max(25, αc (38 − f'c/15)(1 + M1*/M2*)), αc from N*/(0.6 Nuo).")
-    note(ws, 105, "Nc = π²/Le² × 182 do φ0 Mc / (1 + βd), Mc = Mub.  δb = km / (1 − N*/Nc) ≥ 1, km = 0.6 − 0.4 M1*/M2* ≥ 0.4 (δb = 1 if short).  M*d = δb × max(M2*, 0.05 D N*).")
-    DX0 = dm_table(106, "x", "F", "G", "«Dx»", "«slx»", "«Lex»", "«Nuox»", "«Mubx»", "«dox»")
-    DY0 = dm_table(114, "y", "H", "I", "«Dy»", "«sly»", "«Ley»", "«Nuoy»", "«Muby»", "«doy»")
+    heading(ws, 120, "Design Moments – minimum eccentricity and moment magnification (braced)")
+    note(ws, 121, "M2* larger end moment; M1*/M2* negative in single curvature, −1 if M2* ≤ 0.05 D N*. Short if Le/r ≤ max(25, αc (38 − f'c/15)(1 + M1*/M2*)), αc from N*/(0.6 Nuo).")
+    note(ws, 122, "Nc = π²/Le² × 182 do φ0 Mc / (1 + βd), Mc = Mub.  δb = km / (1 − N*/Nc) ≥ 1, km = 0.6 − 0.4 M1*/M2* ≥ 0.4 (δb = 1 if short).  M*d = δb × max(M2*, 0.05 D N*).")
+    DX0 = dm_table(123, "x", "F", "G", "«Dx»", "«slx»", "«Lex»", "«Nuox»", "«Mubx»", "«dox»")
+    DY0 = dm_table(131, "y", "H", "I", "«Dy»", "«sly»", "«Ley»", "«Nuoy»", "«Muby»", "«doy»")
 
     # ---- capacity along the load direction (strain compatibility, biaxial)
-    CP = 123
+    CP = 140
     heading(ws, CP, "Capacity – strain compatibility along the load direction (OAR Concrete add-in)")
     note(ws, CP + 1, "OAR.CONCRETE.COLUMN: finds the neutral-axis direction θ for which the capacity (Mux, Muy) at N* points along (M*x,d, M*y,d); φ from Tbl 2.2.2 (φ0 … φb by N*/Nub).")
     h = CP + 2
@@ -353,8 +373,8 @@ def build_tab(name, d):
         CA(f"J{rr}", f'=IF(H{rr}="","",{barv(f"G{rr}", 5)})')
         CA(f"K{rr}", f'=IF(H{rr}="","",IFERROR({barv(f"G{rr}", 6)}/1000,200))', "0")
         # engine columns
-        for col, f in (("L", f"=N(H{rr})"), ("M", f'=IF(L{rr}=0,"",IF(«CIRC»,«b»,«D»)/2-F{rr})'),
-                       ("N", f'=IF(L{rr}=0,"",I{rr})'), ("O", f'=IF(L{rr}=0,"",«b»/2+E{rr})'), ("P", f'=IF(L{rr}=0,"",K{rr}*1000)')):
+        for col, f in (("L", f"=N(H{rr})"), ("M", f'=IF(L{rr}=0,"",«Dx»/2-F{rr})'),
+                       ("N", f'=IF(L{rr}=0,"",I{rr})'), ("O", f'=IF(L{rr}=0,"",«Dy»/2+E{rr})'), ("P", f'=IF(L{rr}=0,"",K{rr}*1000)')):
             pend.append((f"{col}{rr}", f)); ws[f"{col}{rr}"].font = font(7, color=GREY)
     pend.append((f"E{TYP0}", f'=IF(OR(«bar»="",«bar»="None"),"",OAR.CONCRETE.BARLAYOUT({SEC},«edge»,«n1»,«n2»,{NTYP}))'))
     arrays.append(f"E{TYP0}:F{TYP1}")
@@ -366,7 +386,7 @@ def build_tab(name, d):
     heading(ws, 8, "Design Summary")
     lab("B9", "Adopted section", sz=7, color=GREY); lab("F9", "Max utilisation", sz=7, color=GREY); lab("I9", "Status", sz=7, color=GREY)
     ws.merge_cells("B10:D10"); ws.merge_cells("F10:G10"); ws.merge_cells("I10:K10")
-    F("B10", '=IF(«CIRC»,"Ø"&«b»,«b»&" × "&«D»)&IF(«ntyp»>0,"  ·  "&«ntyp»&«bar»,"")&IF(«ncus»>0," + "&«ncus»&" custom","")&"  ·  f\'c "&«fc»')
+    F("B10", '=IF(«CIRC»,"Ø"&«b»,IF(«POLY»,"custom "&ROUND(«Dy»,0)&" × "&ROUND(«Dx»,0),«b»&" × "&«D»))&IF(«ntyp»>0,"  ·  "&«ntyp»&«bar»,"")&IF(«ncus»>0," + "&«ncus»&" custom","")&"  ·  f\'c "&«fc»')
     ws["B10"].font = font(12, True, color=GREEN); ws["B10"].alignment = LEFT
     CHK0, CHK1 = 15, 24
     c = ws["F10"]; c.value = f'=IF(COUNT(I{CHK0}:I{CHK1})=0,"–",MAX(I{CHK0}:I{CHK1}))'; c.font = font(12, True, color=GREEN); c.number_format = "0%"; c.alignment = LEFT
@@ -377,7 +397,7 @@ def build_tab(name, d):
     for x in ws["I10:K10"][0]: x.border = BOX
     passfail_cf(ws, "I10:K10", "$I$10")
     ws.conditional_formatting.add("I10:K10", FormulaRule(formula=['$I$10="UPDATE ADD-IN"'], fill=PatternFill(bgColor="C55A11"), font=Font(color="FFFFFF", bold=True)))
-    F("B11", '="Lu "&«Lu»&" mm  ·  φ0 "&TEXT(«phi0»,"0.00")&IF(«fsyo»="","","  ·  fsy "&«fsyo»&" (typ.)")&"  ·  "&«model»&" block  ·  biaxial: "&IF(«CIRC»,"strain compatibility",«method»)')
+    F("B11", '="Lu "&«Lu»&" mm  ·  φ0 "&TEXT(«phi0»,"0.00")&IF(«fsyo»="","","  ·  fsy "&«fsyo»&" (typ.)")&"  ·  "&«model»&" block  ·  biaxial: "&IF(«shape»<>"Rectangular","strain compatibility",«method»)')
     ws["B11"].font = font(7, color=GREY)
     firsterr = f'IFERROR(INDEX(E{AX0}:F{AX1},MATCH("#OAR*",E{AX0}:E{AX1},0),1),IFERROR(INDEX(E{C0}:J{C0},1,MATCH("#OAR*",E{C0}:J{C0},0)),IFERROR(INDEX(E{TYP0}:E{TYP1},MATCH("#OAR*",E{TYP0}:E{TYP1},0)),"")))'
     ws["F11"].value = (f'=IFERROR(IF({errs}>0,{firsterr},IF(COUNT(I{CHK0}:I{CHK1})=0,"","Governs: "&INDEX(B{CHK0}:B{CHK1},MATCH(MAX(I{CHK0}:I{CHK1}),I{CHK0}:I{CHK1},0))'
@@ -403,11 +423,11 @@ def build_tab(name, d):
         "=«phiNuo»", "kN", '=IF(E15="","",E15/F15)', nf="0")
     for i in range(NLC):
         rr = 16 + i; c = COLS[i]; lr = LC0 + i; blank = f'$E${lr}=""'
-        use1064 = 'AND(NOT(«CIRC»),«method»="Cl 10.6.4")'
+        use1064 = 'AND(«shape»="Rectangular",«method»="Cl 10.6.4")'
         chk(rr, f'=$B${lr}&" N–M"', f'=IF({blank},"(not used)",IF({use1064},"Cl 10.6.4, αn = "&TEXT({c}{B0 + 5},"0.00"),"strain compat., load direction")&IF(MAX($J${DX0 + i},$J${DY0 + i})>1,"  ·  δb "&TEXT(MAX($J${DX0 + i},$J${DY0 + i}),"0.00"),""))',
             f'=IF({blank},"",IF({use1064},{c}{B1064},{c}{RM}))', f'=IF({blank},"",IF({use1064},1,{c}{C0 + 2}))',
             f'=IF({use1064},"–","kNm")', f'=IF({blank},"",IF({use1064},{c}{B1064},{c}{RSC}))',
-            ratio=f'=IF({blank},"",IF({use1064},{c}{RSC},IF(«CIRC»,"",{c}{B1064})))', nf="0.00")
+            ratio=f'=IF({blank},"",IF({use1064},{c}{RSC},IF(«shape»<>"Rectangular","",{c}{B1064})))', nf="0.00")
     chk(22, "ρ ≥ 0.01", '=IF(«rho»>=0.01,"Cl 10.7.1(a)","below 1 %: Cl 10.7.1(b) lightly loaded / AS 2159 piles – engineer to confirm")',
         "=0.01", "=«rho»", "", '=IF(OR(«rho»=0,«rho»<0.01),"",0.01/«rho»)', nf="0.00%",
         status='=IF(«rho»=0,"–",IF(«rho»>=0.01,"OK","OK*"))')
@@ -433,16 +453,18 @@ def build_tab(name, d):
         top = ref.split(":")[0]; ws[top].value = ArrayFormula(ref, ws[top].value)
     def dvl(formula, ref):
         v = DataValidation(type="list", formula1=formula, allow_blank=True); ws.add_data_validation(v); v.add(ref)
-    dvl('"Rectangular,Circular"', "E39"); dvl('"Rectangular,Curvilinear,Parabolic"', "E43"); dvl('"Cl 10.6.4,Strain compatibility"', "E46")
+    dvl('"Rectangular,Circular,Custom polygon"', "E39"); dvl('"Rectangular,Curvilinear,Parabolic"', "E43"); dvl('"Cl 10.6.4,Strain compatibility"', "E46")
     dvl("=BarList", "E50:E51"); dvl("=BarList", f"G{CUS0}:G{CUS1}")
-    for ref, cond, labref in (("E41", "«CIRC»", "B41"), ("E53", "«CIRC»", "B53"), ("E46:F46", "«CIRC»", "B46")):
+    for ref, cond, labref in (("E40", "«POLY»", "B40"), ("E41", "OR(«CIRC»,«POLY»)", "B41"), ("E52", "«POLY»", "B52"),
+                              ("E53", "OR(«CIRC»,«POLY»)", "B53"), ("E46:F46", '«shape»<>"Rectangular"', "B46"),
+                              ("E77:H88", "NOT(«POLY»)", "B77:D88")):
         f = Fx(cond)
         ws.conditional_formatting.add(ref, FormulaRule(formula=[f], fill=PatternFill(bgColor=NA_FILL), font=Font(color=NA_FONT)))
         ws.conditional_formatting.add(labref, FormulaRule(formula=[f], font=Font(color=NA_FONT)))
     for rr in range(15, LAST + 1):
         if ws.row_dimensions[rr].height is None: ws.row_dimensions[rr].height = 14
     ws.print_area = f"A1:K{LAST}"
-    for b_ in (62, 102, BS0 - 4): ws.row_breaks.append(Break(id=b_))
+    for b_ in (62, 119, BS0 - 4): ws.row_breaks.append(Break(id=b_))
     return ws
 
 
@@ -458,9 +480,15 @@ c2 = dict(loc="Ø600 bored pier (pile calculator check)", shape="Circular", b=60
           bar="N20", n1=6, n2=None, Lu=3000, kx=1.0, ky=1.0, betad=0.6, phi0=0.6, method="Strain compatibility",
           lcs=[("bending only", 0, 150, 150, 0, 0), ("1.2G + 1.5Q", 1500, 120, -60, 60, 30)],
           custom=[])
+# C3: custom outline – 1000 wide x 200 deep, soffit curving up to 150 deep at mid-width; bars follow the curve (illustrative actions)
+c3 = dict(loc="Custom outline – 1000 × 200 blade, curved soffit to 150 at mid-width", shape="Custom polygon", b=None, D=None, fc=40, cover=40,
+          lig="N10", bar="N16", n1=None, n2=None, Lu=3000, kx=1.0, ky=1.0, betad=0.6, phi0=0.6, method="Strain compatibility",
+          corners=[(0, 0, -50, 3), (1000, 0, 0, 0), (1000, 200, 0, 3), (0, 200, 0, 0)],
+          lcs=[("1.2G + 1.5Q", 600, 20, -10, 0, 0), ("1.2G + Wu", 350, 35, 35, 10, -10), ("0.9G + Wu", 250, -35, -35, -10, 10)],
+          custom=[])
 if __name__ == "__main__":
-    for nm_, dd in (("C1", c1), ("C2", c2)): build_tab(nm_, dd)
-    wb._sheets = [wb[n] for n in ("C1", "C2", "Bars")]
+    for nm_, dd in (("C1", c1), ("C2", c2), ("C3", c3)): build_tab(nm_, dd)
+    wb._sheets = [wb[n] for n in ("C1", "C2", "C3", "Bars")]
     wb.active = 0
     from openpyxl.workbook.properties import CalcProperties
     wb.calculation = CalcProperties(fullCalcOnLoad=True)

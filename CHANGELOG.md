@@ -3,6 +3,18 @@
 Each version that reaches `main` is built, tested and published automatically as a GitHub Release.
 The calc sheet shows the version it was calculated with (under the green title bar).
 
+## v0.8.0
+- Column sheet: **Custom polygon** shape – a corner table (x, y, arc rise, bars along each edge) on page 2. Arcs are
+  drawn as 48 chords. Typical bars at every corner plus each edge's bars, offset from the faces and following arcs.
+  New example tab C3 (1000 × 200, soffit curving to 150 at mid-width). r = √(I/Ag) for custom outlines.
+- Add-in: shape `Polygon` for every section function (dims = corner rows x | y | [rise] | [bars]);
+  `OAR.CONCRETE.BARLAYOUT` lays bars along a polygon outline; new `OAR.CONCRETE.SECTIONPROPS` (b, D, Ag, Ix, Iy).
+- Engine: `Outline` module; biaxial solver gets a full-circle fallback for strongly unsymmetric sections (the
+  capacity direction can swing through a large angle within a few degrees of θ).
+- Checked: curved-soffit section against an independent fibre calc with the exact arc (uniaxial, both senses,
+  N = 0 and 800 kN, within 0.02 %); rectangle-as-polygon identical to the rectangle.
+- Column sheet rows from Section Properties onwards move down 17 rows.
+
 ## v0.7.0
 - **Column graphics window** (OAR ribbon > Concrete column > Column graphics), like OAR Steel / Timber's View graphics:
   section and bars to scale, M–N about x and y (both directions, unfactored and φ, key points, design actions) and the
