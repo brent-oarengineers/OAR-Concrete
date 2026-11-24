@@ -255,10 +255,11 @@ module private Painter =
                     if stroke <> "" then
                         use pen = new Pen(colour stroke 1.0, float32 w)
                         g.DrawPolygon(pen, arr)
-            | PPolyline(pts, c, w) ->
+            | PPolyline(pts, c, w, dashed) ->
                 let arr = points pts
                 if arr.Length >= 2 then
                     use pen = new Pen(colour c 1.0, float32 w)
+                    if dashed then pen.DashStyle <- DashStyle.Dash
                     pen.LineJoin <- LineJoin.Round
                     g.DrawLines(pen, arr)
             | PText(x, y, t, c, size, align, bold) ->
@@ -355,6 +356,7 @@ type private ColumnForm(load: unit -> ColumnData, pageInfo: unit -> PageInfo) as
     let cbPhi = check "φ capacity"
     let cbLoads = check "Design actions"
     let cbKey = check "Key points"
+    let cbBoth = new CheckBox(Text = "M–N both directions (±M)", Checked = false, AutoSize = true, Margin = Padding(0, 3, 16, 0))
     let refresh = new Button(Text = "Refresh from sheet", AutoSize = true, Margin = Padding(12, 0, 0, 0))
     let savePdf = new Button(Text = "Save PDF", AutoSize = true, Margin = Padding(6, 0, 0, 0))
     let print = new Button(Text = "Print…", AutoSize = true, Margin = Padding(6, 0, 0, 0))
@@ -379,7 +381,8 @@ type private ColumnForm(load: unit -> ColumnData, pageInfo: unit -> PageInfo) as
         { Unfactored = cbUnf.Checked
           Phi = cbPhi.Checked
           Loads = cbLoads.Checked
-          KeyPoints = cbKey.Checked }
+          KeyPoints = cbKey.Checked
+          BothSides = cbBoth.Checked }
 
     let redraw () =
         scene <- None
@@ -496,6 +499,7 @@ type private ColumnForm(load: unit -> ColumnData, pageInfo: unit -> PageInfo) as
                cbPhi :> Control
                cbLoads :> Control
                cbKey :> Control
+               cbBoth :> Control
                refresh :> Control
                savePdf :> Control
                print :> Control
@@ -514,7 +518,7 @@ type private ColumnForm(load: unit -> ColumnData, pageInfo: unit -> PageInfo) as
                 item <- Some it
                 redraw ()
             | _ -> ())
-        for cb in [ cbUnf; cbPhi; cbLoads; cbKey ] do
+        for cb in [ cbUnf; cbPhi; cbLoads; cbKey; cbBoth ] do
             cb.CheckedChanged.Add(fun _ -> redraw ())
         refresh.Click.Add(fun _ -> reload ())
         savePdf.Click.Add(fun _ -> output true)
