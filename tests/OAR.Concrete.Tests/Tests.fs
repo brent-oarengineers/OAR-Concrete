@@ -315,6 +315,8 @@ let main argv =
     let pctText = sprintf "|M*d| / φMu = %.0f %%" (100.0 * sqrt (200.0 ** 2.0 + 80.0 ** 2.0) / (bx.Phi * bx.Mu))
     check "Graphics  contour reports the biaxial utilisation" 1.0
         (if scC.Prims |> List.exists (fun p -> match p with ColumnView.PText(_, _, t, _, _, _, _) -> t = pctText | _ -> false) then 1.0 else 0.0) 0.0
+    let hit = ColumnView.rayHit [ (0.0, -10.0); (10.0, 0.0); (0.0, 10.0) ] 1.0 1.0
+    check "Graphics  ray from the origin meets the curve" 5.0 (hit |> Option.map fst |> Option.defaultValue nan) 1e-12
     check "Graphics  items: section + 2 M-N + one contour per case" 5.0 (float (ColumnView.items cvData).Length) 0.0
     let pile = Section.circular 600.0 ((Column.circLayout 600.0 72.0 6 |> List.map (fun (x, y) -> Section.barAt 310.0 (300.0 - y) 500.0 (300.0 + x) EsDefault)) @ [ Section.barAt 1018.0 300.0 950.0 300.0 205000.0 ])
     let pileData = { cvData with Section = pile; Concrete = rc 32.0 Rectangular; BarNames = List.replicate 6 "N20" @ [ "TB36" ]

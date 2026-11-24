@@ -19,7 +19,7 @@ type Prim =
     | PLine of x1: float * y1: float * x2: float * y2: float * colour: string * width: float * dashed: bool
     /// stroke "" = no outline
     | PPolygon of pts: (float * float) list * fill: string * opacity: float * stroke: string * width: float
-    | PPolyline of pts: (float * float) list * colour: string * width: float
+    | PPolyline of pts: (float * float) list * colour: string * width: float * dashed: bool
     /// y is the vertical centre of the text
     | PText of x: float * y: float * text: string * colour: string * size: float * align: Align * bold: bool
 
@@ -54,9 +54,11 @@ type View =
     { Unfactored: bool
       Phi: bool
       Loads: bool
-      KeyPoints: bool }
+      KeyPoints: bool
+      /// M–N: both bending directions (−M on the left); false = positive moments only
+      BothSides: bool }
 
-let defaultView = { Unfactored = true; Phi = true; Loads = true; KeyPoints = true }
+let defaultView = { Unfactored = true; Phi = true; Loads = true; KeyPoints = true; BothSides = false }
 
 /// The list on the left of the window: (group, label, tooltip, item)
 let items (d: ColumnData) =
@@ -173,6 +175,23 @@ let private sub (d: ColumnData) =
         | m -> (sprintf "%A" m).ToLowerInvariant()
     sprintf "f'c %.0f MPa  ·  %s, As = %.0f mm² (ρ = %.2f %%)  ·  φ0 = %.2f  ·  %s stress block" d.Concrete.Fc (barSummary d) a (100.0 * a / ag) d.Phi0 model
 
+/// First crossing of the ray from the origin through (dx, dy) with a polyline (t > 0), or None
+let rayHit (pts: (float * float) list) (dx: float) (dy: float) =
+    let arr = Array.ofList pts
+    let mutable best = None
+    for i in 0 .. arr.Length - 2 do
+        let (ax, ay), (bx, by) = arr.[i], arr.[i + 1]
+        let ex, ey = bx - ax, by - ay
+        let det = dx * (-ey) - dy * (-ex)
+        if abs det > 1e-12 then
+            let t = (ax * (-ey) - ay * (-ex)) / det
+            let s = (dx * ay - dy * ax) / det
+            if t > 1e-9 && s >= -1e-9 && s <= 1.0 + 1e-9 then
+                match best with
+                | Some(t0, _, _) when t0 <= t -> ()
+                | _ -> best <- Some(t, ax + s * ex, ay + s * ey)
+    best |> Option.map (fun (_, x, y) -> x, y)
+
 let private mnTheta (axis: char) = if axis = 'x' then 90.0, -90.0 else 0.0, 180.0
 
 /// M of a case about the plot's axis (signed: + compression on the top face for x, on the +x face for y)
@@ -253,31 +272,50 @@ let private mnScene (d: ColumnData) (axis: char) (view: View) (width: float) (he
     let sec, c, duct = d.Section, d.Concrete, d.Duct
     let pos = Column.mnCurve sec c tp d.Phi0 duct
     let neg = Column.mnCurve sec c tn d.Phi0 duct
-    // one line from the squash load round the negative side, through pure tension, up the positive side
-    let line (scale: bool) =
-        [ for n, m, phi in List.rev neg -> (if scale then -phi * m else -m), (if scale then phi * n else n)
-          for n, m, phi in pos -> (if scale then phi * m else m), (if scale then phi * n else n) ]
-    let unf, fac = line false, line true
+    let side (curve: (float * float * float) list) (sgn: float) (scale: bool) =
+        [ for n, m, phi in curve -> (if scale then sgn * phi * m else sgn * m), (if scale then phi * n else n) ]
+    // both directions: one line from the squash load round the −M side, through pure tension, up the +M side
+    let both scale = List.rev (side neg -1.0 scale) @ side pos 1.0 scale
+    let unf, fac = (if view.BothSides then both false else side pos 1.0 false), (if view.BothSides then both true else side pos 1.0 true)
+    // positive only: an unsymmetric section's −M side is shown mirrored (dashed) so hogging cases have their own curve
+    let unsym =
+        List.zip pos neg |> List.exists (fun ((_, mp, _), (_, mn, _)) -> abs (mp - mn) > 0.005 * (abs mp + abs mn + 1.0))
+    let mirror = not view.BothSides && unsym
+    let unfM, facM = side neg 1.0 false, side neg 1.0 true
     let loads = d.Cases |> List.map (fun cs -> cs, caseM axis cs)
+    let plotM (m: float) = if view.BothSides then m else abs m
     let allPts =
-        (if view.Unfactored then unf else []) @ fac @ (if view.Loads then loads |> List.map (fun (cs, m) -> m, cs.N) else [])
+        (if view.Unfactored then unf @ (if mirror then unfM else []) else []) @ fac @ (if mirror then facM else [])
+        @ (if view.Loads then loads |> List.map (fun (cs, m) -> plotM m, cs.N) else [])
     let xs, ys = allPts |> List.map fst, allPts |> List.map snd
     let mlim = max (abs (List.min xs)) (abs (List.max xs))
     let top, bottom = 92.0, 58.0
-    let f = frame (-mlim) mlim (List.min ys) (List.max ys) 74.0 top (width - 100.0) (height - top - bottom) false
+    let f = frame (if view.BothSides then -mlim else 0.0) mlim (List.min ys) (List.max ys) 74.0 top (width - 100.0) (height - top - bottom) false
     let px (x, y) = f.Px x, f.Py y
     let mName = if axis = 'x' then "Mx" else "My"
+    let face = if axis = 'x' then "top face" else "+x face"
+    let otherFace = if axis = 'x' then "bottom face" else "−x face"
     [ yield! title width (sprintf "M–N interaction – bending about %c (%s)" axis mName) (sub d)
       yield!
           legend 16.0 62.0
               [ if view.Unfactored then yield blue, false, "unfactored (Nu, Mu)"
                 if view.Phi then yield orange, false, "design (φNu, φMu)"
                 if view.Loads then yield red, true, "design actions (N*, M*d)" ]
-      yield! axes f (sprintf "%s (kNm)   + compression on the %s" mName (if axis = 'x' then "top face" else "+x face")) "N (kN)  compression +" false
-      if view.Unfactored then yield PPolyline(List.map px unf, blue, 1.6)
-      if view.Phi then yield PPolyline(List.map px fac, orange, 2.2)
+      if mirror then
+          yield PText(width - 16.0, 62.0, sprintf "dashed: −%s (compression on the %s), mirrored – section is unsymmetric" mName otherFace, muted, 8.0, Right, false)
+      let xTitle =
+          if view.BothSides then sprintf "%s (kNm)   + compression on the %s" mName face
+          elif mirror then sprintf "|%s| (kNm)   solid +%s, dashed −%s" mName mName mName
+          else sprintf "|%s| (kNm)" mName
+      yield! axes f xTitle "N (kN)  compression +" false
+      if view.Unfactored then
+          yield PPolyline(List.map px unf, blue, 1.6, false)
+          if mirror then yield PPolyline(List.map px unfM, blue, 1.2, true)
+      if view.Phi then
+          yield PPolyline(List.map px fac, orange, 2.2, false)
+          if mirror then yield PPolyline(List.map px facM, orange, 1.6, true)
       if view.KeyPoints && view.Phi then
-          for th, sgn in [ tp, 1.0; tn, -1.0 ] do
+          for th, sgn in (if view.BothSides then [ tp, 1.0; tn, -1.0 ] else [ tp, 1.0 ]) do
               let a = Column.axisProps sec c th duct
               let phiAt n = if n >= 0.0 then Design.phiCompression d.Phi0 a.PhiB n a.Nub else a.PhiT
               let pts =
@@ -293,11 +331,32 @@ let private mnScene (d: ColumnData) (axis: char) (view: View) (width: float) (he
                       if sgn > 0.0 then
                           yield PText(x + 8.0, y + 9.0, sprintf "%s  (%s kN, %s kNm)" name (fmt n) (fmt (abs m)), muted, 7.5, Left, false)
       if view.Loads then
+          // radial line from the origin through each case to the design curve, with the curve's (φM, φN) bracketed
+          if view.Phi then
+              for cs, m in loads do
+                  let hog = m < 0.0 && not view.BothSides
+                  let curve = if hog && mirror then facM else fac
+                  let mx = plotM m
+                  if abs mx > 1e-9 || abs cs.N > 1e-9 then
+                      match rayHit curve mx cs.N with
+                      | Some(hx, hy) ->
+                          let ox, oy = px (0.0, 0.0)
+                          let ex, ey = px (hx, hy)
+                          yield PLine(ox, oy, ex, ey, red, 1.0, true)
+                          yield PPolygon([ ex - 4.0, ey; ex, ey - 4.0; ex + 4.0, ey; ex, ey + 4.0 ], orange, 1.0, ink, 0.8)
+                          yield PText(ex - 7.0, ey - 9.0, sprintf "(%s, %s)" (fmt (abs hx)) (fmt hy), orange, 8.0, Right, true)
+                      | None -> ()
           for cs, m in loads do
-              let x, y = px (m, cs.N)
-              yield PPolygon(circlePts x y 4.5 16, red, 1.0, "#FFFFFF", 0.8)
-              yield PText(x + 7.0, y + 1.0, cs.Name, red, 8.0, Left, true)
-      yield PText(16.0, height - 14.0, "Uniaxial curves (strain compatibility, OAR.CONCRETE.MNCOLUMN). Biaxial cases are checked on each case's moment contour.", muted, 8.0, Left, false) ]
+              let x, y = px (plotM m, cs.N)
+              // a negative moment shown at |M| (positive-only view) gets an open marker and a (−) tag
+              let hog = m < 0.0 && not view.BothSides
+              yield PPolygon(circlePts x y 4.5 16, (if hog then "#FFFFFF" else red), 1.0, (if hog then red else "#FFFFFF"), (if hog then 1.6 else 0.8))
+              yield PText(x + 7.0, y + 1.0, (if hog then cs.Name + " (−)" else cs.Name), red, 8.0, Left, true)
+      yield
+          PText(16.0, height - 14.0,
+                (if view.BothSides then "Uniaxial curves, both bending directions (strain compatibility, OAR.CONCRETE.MNCOLUMN)."
+                 else "Positive moments: cases with −M plotted at |M| as open markers (−).")
+                + " Dashed: origin → case → design curve, bracketed (φMu kNm, φNu kN). Biaxial cases: see the moment contour.", muted, 8.0, Left, false) ]
 
 // ---------------------------------------------------------------------------------------------
 // Moment contour at N*
@@ -329,8 +388,8 @@ let private contourScene (d: ColumnData) (i: int) (view: View) (width: float) (h
                 if view.Phi then yield orange, false, "design (φMux, φMuy)"
                 if view.Loads then yield red, true, "design actions (M*x,d, M*y,d)" ]
       yield! axes f "Mx (kNm)" "My (kNm)" true
-      if view.Unfactored then yield PPolyline(List.map px unf, blue, 1.6)
-      if view.Phi then yield PPolyline(List.map px fac, orange, 2.2)
+      if view.Unfactored then yield PPolyline(List.map px unf, blue, 1.6, false)
+      if view.Phi then yield PPolyline(List.map px fac, orange, 2.2, false)
       if view.Loads then
           match cap with
           | Some r ->
@@ -387,7 +446,8 @@ let svg (s: Scene) =
             | PPolygon(p, fill, op, stroke, w) ->
                 sprintf "<polygon points='%s' fill='%s' fill-opacity='%s' stroke='%s' stroke-width='%s'/>" (pts p) fill (n op)
                     (if stroke = "" then "none" else stroke) (n w)
-            | PPolyline(p, c, w) -> sprintf "<polyline points='%s' fill='none' stroke='%s' stroke-width='%s'/>" (pts p) c (n w)
+            | PPolyline(p, c, w, dashed) ->
+                sprintf "<polyline points='%s' fill='none' stroke='%s' stroke-width='%s'%s/>" (pts p) c (n w) (if dashed then " stroke-dasharray='6,4'" else "")
             | PText(x, y, t, c, size, al, bold) ->
                 let anchor = match al with Left -> "start" | Centre -> "middle" | Right -> "end"
                 sprintf "<text x='%s' y='%s' fill='%s' font-size='%s' text-anchor='%s' dominant-baseline='central' font-family='Segoe UI, Arial'%s>%s</text>"
