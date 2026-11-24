@@ -108,6 +108,8 @@ module private ColumnSheet =
                                             && s.IndexOf("INDEX(" + marker, StringComparison.OrdinalIgnoreCase) < 0 ->
                           yield i + 1, j + 5, s
                       | _ -> () ]
+            // a spilled (CSE) formula reports its text in every cell of its range: one case per column, top cell
+            |> List.distinctBy (fun (_, col, _) -> col)
         | _ -> []
 
     let isColumnSheet (ws: XlSheet) =

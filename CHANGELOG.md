@@ -3,6 +3,10 @@
 Each version that reaches `main` is built, tested and published automatically as a GitHub Release.
 The calc sheet shows the version it was calculated with (under the green title bar).
 
+## v0.8.1
+- Column graphics: each load case is listed once under *Moment contour at N** (a spilled formula reports its text in
+  every cell of its range, so each case was found once per row of the capacity table).
+
 ## v0.8.0
 - Column sheet: **Custom polygon** shape – a corner table (x, y, arc rise, bars along each edge) on page 2. Arcs are
   drawn as 48 chords. Typical bars at every corner plus each edge's bars, offset from the faces and following arcs.
