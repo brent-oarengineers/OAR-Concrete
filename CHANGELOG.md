@@ -7,6 +7,8 @@ The calc sheet shows the version it was calculated with (under the green title b
 - Column graphics: M–N curves show **positive moments only** by default; tick *M–N both directions (±M)* for the full
   curve. Cases with −M are plotted at |M| as open markers tagged (−). For an unsymmetric section (e.g. a curved
   soffit) the −M curve is drawn mirrored and dashed so hogging cases have their own curve.
+- Column graphics M–N: a dashed line from the origin through each load case to the design curve, with the curve's
+  (φMu, φNu) bracketed at the intersection (the mirrored −M curve for hogging cases on unsymmetric sections).
 
 ## v0.8.1
 - Column graphics: each load case is listed once under *Moment contour at N** (a spilled formula reports its text in

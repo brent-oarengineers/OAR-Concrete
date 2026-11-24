@@ -175,6 +175,23 @@ let private sub (d: ColumnData) =
         | m -> (sprintf "%A" m).ToLowerInvariant()
     sprintf "f'c %.0f MPa  ·  %s, As = %.0f mm² (ρ = %.2f %%)  ·  φ0 = %.2f  ·  %s stress block" d.Concrete.Fc (barSummary d) a (100.0 * a / ag) d.Phi0 model
 
+/// First crossing of the ray from the origin through (dx, dy) with a polyline (t > 0), or None
+let rayHit (pts: (float * float) list) (dx: float) (dy: float) =
+    let arr = Array.ofList pts
+    let mutable best = None
+    for i in 0 .. arr.Length - 2 do
+        let (ax, ay), (bx, by) = arr.[i], arr.[i + 1]
+        let ex, ey = bx - ax, by - ay
+        let det = dx * (-ey) - dy * (-ex)
+        if abs det > 1e-12 then
+            let t = (ax * (-ey) - ay * (-ex)) / det
+            let s = (dx * ay - dy * ax) / det
+            if t > 1e-9 && s >= -1e-9 && s <= 1.0 + 1e-9 then
+                match best with
+                | Some(t0, _, _) when t0 <= t -> ()
+                | _ -> best <- Some(t, ax + s * ex, ay + s * ey)
+    best |> Option.map (fun (_, x, y) -> x, y)
+
 let private mnTheta (axis: char) = if axis = 'x' then 90.0, -90.0 else 0.0, 180.0
 
 /// M of a case about the plot's axis (signed: + compression on the top face for x, on the +x face for y)
@@ -314,6 +331,21 @@ let private mnScene (d: ColumnData) (axis: char) (view: View) (width: float) (he
                       if sgn > 0.0 then
                           yield PText(x + 8.0, y + 9.0, sprintf "%s  (%s kN, %s kNm)" name (fmt n) (fmt (abs m)), muted, 7.5, Left, false)
       if view.Loads then
+          // radial line from the origin through each case to the design curve, with the curve's (φM, φN) bracketed
+          if view.Phi then
+              for cs, m in loads do
+                  let hog = m < 0.0 && not view.BothSides
+                  let curve = if hog && mirror then facM else fac
+                  let mx = plotM m
+                  if abs mx > 1e-9 || abs cs.N > 1e-9 then
+                      match rayHit curve mx cs.N with
+                      | Some(hx, hy) ->
+                          let ox, oy = px (0.0, 0.0)
+                          let ex, ey = px (hx, hy)
+                          yield PLine(ox, oy, ex, ey, red, 1.0, true)
+                          yield PPolygon([ ex - 4.0, ey; ex, ey - 4.0; ex + 4.0, ey; ex, ey + 4.0 ], orange, 1.0, ink, 0.8)
+                          yield PText(ex - 7.0, ey - 9.0, sprintf "(%s, %s)" (fmt (abs hx)) (fmt hy), orange, 8.0, Right, true)
+                      | None -> ()
           for cs, m in loads do
               let x, y = px (plotM m, cs.N)
               // a negative moment shown at |M| (positive-only view) gets an open marker and a (−) tag
@@ -324,7 +356,7 @@ let private mnScene (d: ColumnData) (axis: char) (view: View) (width: float) (he
           PText(16.0, height - 14.0,
                 (if view.BothSides then "Uniaxial curves, both bending directions (strain compatibility, OAR.CONCRETE.MNCOLUMN)."
                  else "Positive moments: cases with −M plotted at |M| as open markers (−).")
-                + " Biaxial cases are checked on each case's moment contour.", muted, 8.0, Left, false) ]
+                + " Dashed: origin → case → design curve, bracketed (φMu kNm, φNu kN). Biaxial cases: see the moment contour.", muted, 8.0, Left, false) ]
 
 // ---------------------------------------------------------------------------------------------
 // Moment contour at N*
